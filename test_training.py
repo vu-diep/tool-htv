@@ -150,8 +150,8 @@ def test_single_image(model_path: str, image_path: str):
 if __name__ == "__main__":
     
     # 🔧 CẤU HÌNH - THAY ĐỔI Ở ĐÂY
-    MODEL_PATH = "E:/asfy/facebook/tool_playwright/vision/models/best.pt"
-    IMAGE_PATH = "E:/asfy/facebook/tool_playwright/Test_001.jpg"
+    MODEL_PATH = "D:/CongViec/tool-htv-after/vision/models/best.pt"
+    IMAGE_PATH = "D:/CongViec/tool-htv-after/Test_001.jpg"
     
     # 🚀 CHẠY TEST
     print("🚀 Bắt đầu test model...")
