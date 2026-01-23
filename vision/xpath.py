@@ -40,6 +40,11 @@ class Xpath:
         "See original",  # Xem bản gốc
         "Rate this translation",  # Xếp hạng bản dịch này
     ]
+    a = ".//a"
+    img = ".//img"
+    video = ".//video"
+    comment_element = '//div[@role="button" and @aria-expanded="true"]//span[contains(text(), "comments")]'
+    shares_element = '(//div[@role="button"]//span[contains(text(), "shares")])[last()]'
 
 
 class XpathLogin:

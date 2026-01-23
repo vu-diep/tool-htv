@@ -540,8 +540,13 @@ class CrawlNewsfeed(Base):
                 tool_activity_logs_id=tool_activity_logs_id,
                 status=1,
             )
-            sleep(20)
             print("bat dau lay duong link bai viet")
+            list_posts = []
+            # Lặp qua từng XPath cho đến khi tìm được phần tử
+            for xpath in xpaths.list_posts:
+                list_posts = driver.find_all(xpath)
+                if list_posts:
+                    break
             list_articles = self.get_list_post_web(driver=driver, stop_event=stop_event)
             print("list_articles: ", json.dumps(list_articles, indent=4))
             return
@@ -678,27 +683,28 @@ class CrawlNewsfeed(Base):
                     #     if not btn_follow:
                     #         continue
                     # kiểm tra nếu có see more thì click vào để lấy toàn bộ nội dung
-                    content, content_link = self.extract_facebook_content_web(
+                    content, content_link = self.extract_facebook_content(
                         driver, modal=modal
                     )
                     print("content: ", content)
+                    print("content_link: ", content_link)
                     sleep(self.random_seconds())
                     matched_keywords = []
-                    if filter_keyword:
-                        normalized_content = self.remove_accents(content.lower())
-                        for kw in keywords:
-                            keyword_text = kw["keyword"]
-                            normalized_keyword = self.remove_accents(
-                                keyword_text.lower()
-                            )
+                    # if filter_keyword:
+                    #     normalized_content = self.remove_accents(content.lower())
+                    #     for kw in keywords:
+                    #         keyword_text = kw["keyword"]
+                    #         normalized_keyword = self.remove_accents(
+                    #             keyword_text.lower()
+                    #         )
 
-                            # Kiểm tra trong nội dung bài viết
-                            if normalized_keyword in normalized_content:
-                                matched_keywords.append(kw)
-                                continue  # khỏi cần kiểm tra trong comment nữa nếu đã thấy
-                        # nếu không tìm thấy keyword thì bỏ qua
-                        if len(matched_keywords) == 0:
-                            continue
+                    #         # Kiểm tra trong nội dung bài viết
+                    #         if normalized_keyword in normalized_content:
+                    #             matched_keywords.append(kw)
+                    #             continue  # khỏi cần kiểm tra trong comment nữa nếu đã thấy
+                    #     # nếu không tìm thấy keyword thì bỏ qua
+                    #     if len(matched_keywords) == 0:
+                    #         continue
                     # thu thập đường link
                     idAreaPost = (
                         modal.get_attribute("aria-posinset")
@@ -708,36 +714,34 @@ class CrawlNewsfeed(Base):
                     )
                     if idAreaPost not in listId:
                         listId.add(idAreaPost)
-                        links = modal.find_all(".//a")
+                        links = driver.find_all(xpaths.a, parent=modal)
                         dataMedia = self.get_image_and_video(driver, modal)
                         for link in links:
+                            if link is None:
+                                continue
+                            box = link.bounding_box()
                             if (
-                                link.is_displayed()
-                                and link.size["width"] > 0
-                                and link.size["height"] > 0
+                                link.is_visible()
+                                and box["width"] > 0
+                                and box["height"] > 0
                             ):
-                                driver.hover_element_script(link)
-                                driver.focus_element_script(link)
+                                driver.js_hover_and_focus(link)
+                                sleep(5)
                                 href = link.get_attribute("href")
+                                print("href: ", href)
                                 if not href:
                                     print("Khong tim thay href trong link")
                                     continue
                                 href = self.convert_url.clean_url_keep_params(href)
-                                link_time = link.text_content().strip()
+                                link_time = link.inner_text().strip()
                                 try:
                                     converTime = self.convert_to_db_format(link_time)
                                 except:
                                     converTime = None
 
                                 post_id = self.get_post_id(href, converTime)
-
-                                if post_id == "" or any(
-                                    d["post_fb_id"] == post_id
-                                    or d["post_fb_link"] == href
-                                    for d in dataLink
-                                ):
-                                    continue
-                                if post_id in list_post_id:
+                                print("post_id: ", post_id)
+                                if post_id == "" or post_id in list_post_id:
                                     continue
 
                                 list_article.append(
@@ -756,6 +760,7 @@ class CrawlNewsfeed(Base):
                         break
                 except Exception as e:
                     print(f"Phan tu khong ton tai, tim lai phan tu: {e}")
+                    traceback.print_exc()
                     continue
             driver.scroll_mouse(delta_y=500, times=5, delay=0.4)
             sleep(self.random_seconds())
@@ -800,10 +805,11 @@ class CrawlNewsfeed(Base):
         if len(dataMedia["images"]) == 0 and len(dataMedia["videos"]) == 0:
             dataMedia = self.get_image_and_video(modal)
             # kiểm tra nếu có see more thì click vào để lấy toàn bộ nội dung
-            content, content_link = self.extract_facebook_content_web(
+            content, content_link = self.extract_facebook_content(
                 modal=modal, driver=driver
             )
-
+            print("content: ", content)
+            print("content_link: ", content_link)
             matched_keywords = []
             if filter_keyword:
                 normalized_content = self.remove_accents(content.lower())
@@ -872,25 +878,21 @@ class CrawlNewsfeed(Base):
         }
         try:
             all_reactions = modal.find('(//div[text()="All reactions:"]/..)[last()]')
-            like = all_reactions.text_content()
+            like = all_reactions.inner_text()
             like = self.convert_shorthand_to_number(like)
             data["like"] = like
         except Exception as e:
             print(f"Khong lay duoc like")
         try:
-            comment_element = modal.find(
-                '//div[@role="button" and @aria-expanded="true"]//span[contains(text(), "comments")]'
-            )
-            comment = comment_element.text_content()
+            comment_element = modal.find(xpaths.comment_element)
+            comment = comment_element.inner_text()
             comment = self.convert_shorthand_to_number(comment)
             data["comment"] = comment
         except Exception as e:
             print(f"Khong lay duoc comments")
         try:
-            shares_element = modal.find(
-                '(//div[@role="button"]//span[contains(text(), "shares")])[last()]'
-            )
-            shares = shares_element.text_content()
+            shares_element = modal.find(xpaths.shares_element, type_query = "tag_name")
+            shares = shares_element.inner_text()
             shares = self.convert_shorthand_to_number(shares)
             data["share"] = shares
         except Exception as e:
@@ -957,7 +959,7 @@ class CrawlNewsfeed(Base):
                         print("Khong co phan tu ben trong div 2, bo qua.")
                         continue  # Không có phần tử bên trong, bỏ qua
 
-                    textComment = div_2[0].text_content().strip()
+                    textComment = div_2[0].inner_text().strip()
 
                     if textComment == "":
                         print("Khong co noi dung comment, bo qua.")
@@ -999,7 +1001,7 @@ class CrawlNewsfeed(Base):
                                 './/*[contains(@aria-label, "Comment")]/..//span[@role="link" and @data-focusable="true"]'
                             )
                             if link_comment_elements:
-                                href = link_comment_elements[0].text_content().strip()
+                                href = link_comment_elements[0].inner_text().strip()
                                 if (
                                     href
                                     and self.convert_url.is_valid_link(href, linkItem)
@@ -1212,7 +1214,7 @@ class CrawlNewsfeed(Base):
                     tool_activity_logs_id=tool_activity_logs_id,
                     status=1,
                 )
-                time_text = btn_detail.text_content().strip()
+                time_text = btn_detail.inner_text().strip()
                 try:
                     converTime = self.convert_to_db_format(time_text)
                     driver.click_script(btn_detail)
@@ -1324,13 +1326,13 @@ class CrawlNewsfeed(Base):
             content_element = driver.find(
                 '((((//*[@data-pull-to-refresh-action-id])[1]//*[@data-mcomponent="MContainer" and @data-type="container"]//*[@data-mcomponent="ServerTextArea" and @data-type="text" and @style]//*[@dir="auto" and @style]//span[@class="f1"])[1])//..)[1]',
             )
-            content = content_element.text_content().strip()
+            content = content_element.inner_text().strip()
             content_link = []
             # tìm đường link trong nội dung bài viết
             link_content_elements = content_element.find_all('//span[@role="link"]')
             if len(link_content_elements) > 0:
                 for link_element in link_content_elements:
-                    href = link_element.text_content().strip()
+                    href = link_element.inner_text().strip()
                     if href and href.startswith("http"):
                         clean_href = self.convert_url.clean_facebook_url_redirect(href)
                         clean_href = self.convert_url.remove_params(
@@ -1434,7 +1436,7 @@ class CrawlNewsfeed(Base):
             name_page_element = driver.find(
                 '(//*[@data-mcomponent="ServerTextArea" and @data-type="text"]//span[@data-action-id and @role="link" and @data-focusable="true"][1])[1]'
             )
-            name = name_page_element.text_content().strip()
+            name = name_page_element.inner_text().strip()
             # chuyển hướng đến trang cá nhân của bài viết
             driver.execute_script(
                 "arguments[0].scrollIntoView(true);", name_page_element
@@ -1519,15 +1521,13 @@ class CrawlNewsfeed(Base):
 
         followers = driver.find('(//span[text()="followers"]/..)//span[1]')
         if followers:
-            follow_counts = self.convert_shorthand_to_number(followers.text_content())
+            follow_counts = self.convert_shorthand_to_number(followers.inner_text())
         likes = driver.find('(//span[text()="likes"]/..)//span[1]')
         if likes:
-            like_counts = self.convert_shorthand_to_number(likes.text_content())
+            like_counts = self.convert_shorthand_to_number(likes.inner_text())
         following = driver.find('(//span[text()="following"]/..)//span[1]')
         if following:
-            following_counts = self.convert_shorthand_to_number(
-                following.text_content()
-            )
+            following_counts = self.convert_shorthand_to_number(following.inner_text())
         return like_counts, follow_counts, following_counts
 
 

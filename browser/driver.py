@@ -48,54 +48,64 @@ class Driver(ChromeManager):
         if e_wait > 0:
             sleep(e_wait)
     
-    def build_selector(self, query, type_query):
+    def build_selector(self, query: str, type_query: str):
         if type_query == "xpath":
-            # ✅ Giữ nguyên nếu đã có // hoặc .// ở đầu
-            if query.startswith("//") or query.startswith(".//"):
-                selector = query
-            else:
-                # Chỉ thêm // nếu chưa có
-                selector = f"//{query}"
-        elif type_query == "css" or type_query == "tag_name":
-            selector = query
+            q = query.strip()
+
+            # Nếu đã có prefix xpath= → giữ nguyên
+            if q.startswith("xpath="):
+                return q
+
+            # Các dạng XPath hợp lệ
+            if (
+                q.startswith("//")
+                or q.startswith(".//")
+                or q.startswith("(")
+            ):
+                return f"xpath={q}"
+
+            # Fallback: coi như shorthand → thêm //
+            return f"xpath=//{q}"
+
+        elif type_query in ("css", "tag_name"):
+            return query
+
         elif type_query == "text":
-            selector = f"text={query}"
+            return f"text={query}"
+
         elif type_query == "id":
-            selector = f"#{query.lstrip('#')}"
+            return f"#{query.lstrip('#')}"
+
         else:
             raise ValueError(f"Unsupported type_query: {type_query}")
-        return selector
-    
+
     
     def find(
         self,
         query: str,
         type_query: str = "xpath",
         send_keys: Optional[str] = None,
-        wait: int = 0,
+        wait: int = 3000,
         parent: Optional[Locator] = None,
     ) -> Optional[Locator]:
+        selector = self.build_selector(query, type_query)
+        scope = parent if parent else self.current_page
+        locator = scope.locator(selector).first
+
         try:
-            selector = self.build_selector(query, type_query)
-            scope = parent if parent else self.current_page
-            if type_query == "xpath" and selector.startswith(".//") and parent:
-                # Playwright Locator không cần .// mà chỉ cần //
-                selector = selector[1:]  # Bỏ dấu chấm đầu: .// -> //
-            locator = scope.locator(selector)
-            
-            # Wait với timeout
-            timeout = wait if wait > 0 else 3000
-            locator.first.wait_for(state="visible", timeout=timeout)
-            
-            # Send keys nếu cần
-            if send_keys is not None:
-                locator.first.fill(send_keys)
-            
-            return locator.first
-            
-        except Exception as e:
-            self.logger.error(f"Find element error: {e}, query: {query}")
+            locator.wait_for(state="attached", timeout=wait)
+        except TimeoutError:
+            self.logger.warning(f"Element NOT FOUND: {query}")
             return None
+
+        if not locator.is_visible():
+            self.logger.warning(f"Element found but NOT visible: {query}")
+            return None
+
+        if send_keys is not None:
+            locator.fill(send_keys)
+
+        return locator
 
 
     def find_all(
@@ -103,7 +113,6 @@ class Driver(ChromeManager):
         query: str,
         type_query: str = "xpath",
         wait: float = 0,
-        timeout: int = 5000,
         last: bool = False,
         parent: Optional[Locator] = None,
     ):
@@ -115,8 +124,6 @@ class Driver(ChromeManager):
             if type_query == "xpath" and selector.startswith(".//") and parent:
                 selector = selector[1:]  # .// -> //
             # Wait element đầu tiên
-            locator.first.wait_for(state="visible", timeout=timeout)
-            
             if wait > 0:
                 sleep(wait)
             
@@ -403,3 +410,52 @@ class Driver(ChromeManager):
             
         except Exception as e:
             self.logger.error(f"Lỗi khi cuộn chuột: {e}")
+            
+    def js_hover_and_focus(self, locator: Locator):
+        try:
+            locator.wait_for(state="attached", timeout=3000)
+
+            # Hover thật
+            locator.hover(force=True)
+
+            # JS evaluate TRỰC TIẾP trên element
+            locator.evaluate(
+                """
+                (element) => {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    const rect = element.getBoundingClientRect();
+                    const x = rect.left + rect.width / 2;
+                    const y = rect.top + rect.height / 2;
+
+                    ['mouseenter', 'mouseover', 'mousemove'].forEach(type => {
+                        element.dispatchEvent(new MouseEvent(type, {
+                            bubbles: true,
+                            cancelable: true,
+                            clientX: x,
+                            clientY: y
+                        }));
+                    });
+
+                    ['pointerenter', 'pointerover', 'pointermove'].forEach(type => {
+                        element.dispatchEvent(new PointerEvent(type, {
+                            bubbles: true,
+                            cancelable: true,
+                            clientX: x,
+                            clientY: y,
+                            pointerType: 'mouse'
+                        }));
+                    });
+
+                    element.focus?.({ preventScroll: true });
+                    return true;
+                }
+                """
+            )
+
+            return True
+
+        except Exception as e:
+            print("Hover & focus error:", e)
+            return False
+

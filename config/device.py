@@ -49,7 +49,7 @@ class DeviceManager:
 
         # Địa chỉ IP công khai và quốc gia
         try:
-            public_ip = requests.get("https://api.ipify.org").text_content()
+            public_ip = requests.get("https://api.ipify.org").inner_text()
             info["Địa chỉ IP công khai"] = public_ip
 
             # Lấy thông tin quốc gia

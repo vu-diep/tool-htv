@@ -58,7 +58,7 @@ class Base(RootManager):
             for selector in selectors:
                 try:
                     elem = driver.find(selector)
-                    name_page = elem.text_content().strip()
+                    name_page = elem.inner_text().strip()
                     if name_page is None:
                         text = driver.execute_script(
                             "return arguments[0].innerText;", elem
@@ -83,15 +83,15 @@ class Base(RootManager):
 
             likes = driver.find("a[href*='friends_likes']", type_query="css")
             if likes is not None:
-                data["like_counts"] = likes.text_content()
+                data["like_counts"] = likes.inner_text()
 
             follows = driver.find("a[href*='followers']", type_query="css")
             if follows is not None:
-                data["follow_counts"] = follows.text_content()
+                data["follow_counts"] = follows.inner_text()
 
             following = driver.find("a[href*='following']", type_query="css")
             if following is not None:
-                data["following_counts"] = following.text_content()
+                data["following_counts"] = following.inner_text()
 
             return name
         except Exception as e:
@@ -191,7 +191,7 @@ class Base(RootManager):
         """
         return random.randint(min_seconds, max_seconds)
 
-    def extract_facebook_content_web(self, driver, modal):
+    def extract_facebook_content(self, driver, modal):
         from vision.xpath import xpaths
         from vision.convert_url import ConvertUrl
 
@@ -218,7 +218,7 @@ class Base(RootManager):
             content = driver.find(xpaths.content, parent=modal)
             if content is None:
                 return "", content_link
-            a_tags = driver.find_all(".//a", parent=content)
+            a_tags = driver.find_all(xpaths.a, parent=content)
             for a in a_tags:
                 href = a.get_attribute("href")
                 if href:
@@ -234,7 +234,6 @@ class Base(RootManager):
                             }
                         )
             contentText = content.inner_text()
-            print("contentText: ", contentText)
             for rep in replace_content:
                 contentText = contentText.replace(rep.get("text"), rep.get("link"))
 
@@ -251,7 +250,7 @@ class Base(RootManager):
         return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
     # lấy ảnh và video
-    def get_image_and_video(driver, modal):
+    def get_image_and_video(self, driver, modal):
         media = None
         data = {"images": [], "videos": []}
         try:
@@ -259,13 +258,13 @@ class Base(RootManager):
         except Exception:
             media = modal
         try:
-            images = driver.find_all(".//img", parent=media)
+            images = driver.find_all(xpaths.img, parent=media)
             for img in images:
                 src = img.get_attribute("src")
                 if src and src.startswith("http") and "emoji.php" not in src:
                     data["images"].append(img.get_attribute("src"))
 
-            videos = driver.find_all(".//video", parent=media)
+            videos = driver.find_all(xpaths.video, parent=media)
             for video in videos:
                 data["videos"].append(video.get_attribute("src"))
         except Exception as e:
@@ -273,7 +272,7 @@ class Base(RootManager):
             raise Exception("Bai viet k co anh hoac video")
         return data
 
-    def convert_to_db_format(time_string):
+    def convert_to_db_format(self, time_string):
         try:
             parsed_time = dateparser.parse(time_string)
             if parsed_time:
@@ -333,7 +332,7 @@ class Base(RootManager):
 
             # Kiểm tra xem bài viết có được tài trợ không
             for a in as_links:
-                if not a.is_displayed():
+                if not a.is_visible():
                     print("Skip: tag <a> not visible")
                     continue
 
@@ -350,13 +349,13 @@ class Base(RootManager):
                         content = []
                         for span in spans:
                             if (
-                                not span.text_content()
+                                not span.inner_text()
                                 or span.value_of_css_property("position") == "absolute"
                             ):
                                 continue
                             try:
                                 order = int(span.value_of_css_property("order"))
-                                text = span.text_content().strip()
+                                text = span.inner_text().strip()
                                 if text:
                                     content.append({"index": order, "text": text})
                             except ValueError:
@@ -376,7 +375,7 @@ class Base(RootManager):
                                     return db_time
 
                     # Try direct text if spans failed
-                    text = a.text_content().strip()
+                    text = a.inner_text().strip()
                     if text:
                         db_time = self.convert_to_db_format(text)
                         if db_time:
