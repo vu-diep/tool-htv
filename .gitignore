@@ -1,0 +1,24 @@
+# ===============================
+# Ignore temporary runtime data
+# ===============================
+tmp/
+tmp/**
+
+# ===============================
+# Ignore chrome binaries & profiles
+# ===============================
+resources/chrome/
+resources/chrome/**
+
+# ===============================
+# Ignore browser extensions
+# ===============================
+resources/extensions/
+resources/extensions/**
+
+# ===============================
+# (Khuyến nghị thêm)
+# ===============================
+__pycache__/
+*.log
+.env

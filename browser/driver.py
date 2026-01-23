@@ -1,0 +1,405 @@
+import os
+from time import sleep
+from typing import Optional
+from playwright.sync_api import Locator, TimeoutError
+import logging
+import requests
+import requests
+import asyncio
+
+from .chrome import ChromeManager
+from utils.bot_telegram import BotTelegram
+
+
+class Driver(ChromeManager):
+    def __init__(
+        self,
+        profile=None,
+        headless=None,
+        startUrl=True,
+        incognito=False,
+        use_extension=True,
+        custom_options = {}
+    ):
+        # gọi constructor của class cha và truyền use_extension
+        super().__init__(use_extension=use_extension)
+        result= self.create_browser(
+            profile=profile,
+            headless=headless,
+            startUrl=startUrl,
+            incognito=incognito,
+            custom_options=custom_options
+        )
+        # Quản lý trình duyệt
+        self.browser = result["browser"]
+        # Hồ sơ trình duyệt: profile
+        self.context = result["context"]
+        # tab trình duyệt
+        self.page = result["page"]
+        self.logger = logging.getLogger(__name__)
+        self.action_send_error = ""
+        self.current_url = self.page.url
+        self.current_page = self.page
+        
+        
+    def get(self, url: str, e_wait: int = 0, driver=None):
+        page = driver if driver else self.current_page   # hỗ trợ truyền page riêng nếu cần
+        page.goto(url)
+        if e_wait > 0:
+            sleep(e_wait)
+    
+    def build_selector(self, query, type_query):
+        if type_query == "xpath":
+            # ✅ Giữ nguyên nếu đã có // hoặc .// ở đầu
+            if query.startswith("//") or query.startswith(".//"):
+                selector = query
+            else:
+                # Chỉ thêm // nếu chưa có
+                selector = f"//{query}"
+        elif type_query == "css" or type_query == "tag_name":
+            selector = query
+        elif type_query == "text":
+            selector = f"text={query}"
+        elif type_query == "id":
+            selector = f"#{query.lstrip('#')}"
+        else:
+            raise ValueError(f"Unsupported type_query: {type_query}")
+        return selector
+    
+    
+    def find(
+        self,
+        query: str,
+        type_query: str = "xpath",
+        send_keys: Optional[str] = None,
+        wait: int = 0,
+        parent: Optional[Locator] = None,
+    ) -> Optional[Locator]:
+        try:
+            selector = self.build_selector(query, type_query)
+            scope = parent if parent else self.current_page
+            if type_query == "xpath" and selector.startswith(".//") and parent:
+                # Playwright Locator không cần .// mà chỉ cần //
+                selector = selector[1:]  # Bỏ dấu chấm đầu: .// -> //
+            locator = scope.locator(selector)
+            
+            # Wait với timeout
+            timeout = wait if wait > 0 else 3000
+            locator.first.wait_for(state="visible", timeout=timeout)
+            
+            # Send keys nếu cần
+            if send_keys is not None:
+                locator.first.fill(send_keys)
+            
+            return locator.first
+            
+        except Exception as e:
+            self.logger.error(f"Find element error: {e}, query: {query}")
+            return None
+
+
+    def find_all(
+        self,
+        query: str,
+        type_query: str = "xpath",
+        wait: float = 0,
+        timeout: int = 5000,
+        last: bool = False,
+        parent: Optional[Locator] = None,
+    ):
+        try:
+            selector = self.build_selector(query, type_query)
+            scope = parent if parent else self.current_page
+            locator = scope.locator(selector)
+            
+            if type_query == "xpath" and selector.startswith(".//") and parent:
+                selector = selector[1:]  # .// -> //
+            # Wait element đầu tiên
+            locator.first.wait_for(state="visible", timeout=timeout)
+            
+            if wait > 0:
+                sleep(wait)
+            
+            if last:
+                return locator.last
+            
+            # Trả về list Locator
+            count = locator.count()
+            return [locator.nth(i) for i in range(count)]
+            
+        except Exception as e:
+            self.logger.error(f"Find_all element error: {e}, query: {query}")
+            return []
+    
+    def click_text(self, text, wait=0):
+        xpath = f"//*[contains(text(), '{text}')]"
+        try:
+            ele = self.find(xpath, wait=wait)
+            if ele is not None:
+                ele.click()
+        except Exception as e:
+            print(f"Khong click dc element: {xpath}: ")
+    
+    def click_ok(self):
+        try:
+            ok_button = self.find('//*[@aria-label="OK"]')
+            ok_button.click()
+        except Exception as e:
+            pass
+    
+    def new_tab(self, domain: str = None):
+        new_page = self.context.new_page()
+        
+        if domain is not None:
+            new_page.goto(domain)
+            new_page.wait_for_load_state("networkidle", timeout=30000)  # tùy chọn chờ load ổn định
+        
+        self.current_page = new_page            # <-- quan trọng: chuyển focus sang tab mới
+        return new_page
+    
+    def switch_to_page(self, page):
+        """Chuyển tab đang làm việc sang page khác"""
+        if page and not page.is_closed():
+            self.current_page = page
+            self.current_page.bring_to_front()  # tùy chọn - chỉ có tác dụng visual
+            self.logger.info(f"Da chuyen sang tab: {self.current_page.url}")
+        else:
+            self.logger.warning("Không thể chuyen sang tab nay (da dong khong ton tai)")
+
+    def switch_to_main(self):
+        """Quay về tab chính ban đầu"""
+        if not self.page.is_closed():
+            self.switch_to_page(self.page)
+            
+    def send_image_error(self, content, api="upload-image-error"):
+        try:
+            content = self.root.config_message(message=content, action=self.action_send_error)
+
+            self.model.headers.pop(
+                "Content-Type", None
+            )  # Xóa Content-Type để requests tự đặt
+
+            # Chụp ảnh màn hình và lưu thành file
+            img_path = "error.png"
+            self.current_page.save_screenshot(img_path)
+
+            # Mở file ảnh và gửi lên API
+            with open(img_path, "rb") as img_file:
+                files = {"image": ("error.png", img_file, "image/png")}
+                data = {"content": content}
+
+                response = requests.post(
+                    url=f"{self.model.base_url}/{api}",
+                    headers=self.model.headers,
+                    files=files,
+                    data=data,
+                )
+            # Kiểm tra phản hồi từ API
+            if response.status_code == 200:
+                print("Anh da duoc gui thanh cong.")
+        except Exception as e:
+            print(f"Loi xong qua trinh gui anh: {e}")
+
+        finally:
+            # Xóa file ảnh sau khi gửi
+            if os.path.exists(img_path):
+                os.remove(img_path)
+                print("Danh da bi xoa.")
+    
+    def click_script(self, element, wait=0.5):
+        try:
+            if not element:
+                print("Phần tử không tồn tại:", element)
+                return
+
+            # Scroll vào view
+            self.current_page.evaluate("el => el.scrollIntoView({block: 'center', inline: 'center'})", element)
+            # hoặc giữ nguyên cách cũ của bạn
+            # self.current_page.evaluate("el => el.scrollIntoView(true)", element)
+
+            import time
+            time.sleep(wait)
+
+            # Click bằng JS
+            self.current_page.evaluate("el => el.click()", element)
+
+        except Exception as e:
+            raise Exception(f"Lỗi click: {e}") from e
+        
+    def hover_element_script(self, element, wait_time=1):
+        self.execute_script("""
+            const element = arguments[0];
+            
+            element.scrollIntoView({behavior: 'smooth', block: 'center'});
+            
+            // Tạo và dispatch các events theo thứ tự tự nhiên
+            const events = [
+                'mouseenter',
+                'mouseover', 
+                'mousemove'
+            ];
+            
+            events.forEach(eventType => {
+                const event = new MouseEvent(eventType, {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window,
+                    detail: 1,
+                    screenX: 0,
+                    screenY: 0,
+                    clientX: element.getBoundingClientRect().left + element.offsetWidth / 2,
+                    clientY: element.getBoundingClientRect().top + element.offsetHeight / 2,
+                    ctrlKey: false,
+                    altKey: false,
+                    shiftKey: false,
+                    metaKey: false,
+                    button: 0,
+                    relatedTarget: null
+                });
+                element.dispatchEvent(event);
+            });
+            
+            // Focus vào element (một số site cần focus để hiển thị tooltip/link)
+            if (element.focus) {
+                element.focus();
+            }
+            
+            // Trigger pointer events (một số framework modern dùng pointer thay vì mouse)
+            const pointerOverEvent = new PointerEvent('pointerover', {
+                bubbles: true,
+                cancelable: true,
+                view: window,
+                clientX: element.getBoundingClientRect().left + element.offsetWidth / 2,
+                clientY: element.getBoundingClientRect().top + element.offsetHeight / 2
+            });
+            element.dispatchEvent(pointerOverEvent);
+            
+            return true;
+        """, element)
+        
+        sleep(wait_time)
+    
+    def focus_element_script(self, element, wait=0.5):
+        self.current_page.execute_script("""arguments[0].scrollIntoView(true);arguments[0].focus();""", element)
+        sleep(wait)
+                   
+    def send_keys(self, element, content):
+        # for char in content:
+        #     sleep(random.uniform(0.05, 0.2))  # Giả lập người dùng gõ từng ký tự
+        #     element.send_keys(char)
+        element.keyboard.type(content, delay=60)
+    
+       # Tạo hàm send_message để sử dụng ở nơi khác
+    
+    async def send_message(self, message, group):
+        try:
+            TOKEN = '7914192265:AAFdqhdCCRTOBWoszckui-fDrMhMu0iXWzA'
+            bot_instance = BotTelegram(TOKEN)
+            bot = bot_instance.createChat()
+            # phân loại nhóm trước khi gửi tin nhắn
+            chat_id = self.get_content_file_config('chat_telegram_id_tool_fb_success', '-1002493389024')
+            if group == "check":
+                chat_id = self.get_content_file_config('chat_telegram_id_tool_fb_check', '-1002448273317')
+            chat_id = chat_id.strip()
+            if not chat_id:
+                print("Khong tim thay chat id: ", chat_id)
+                return
+            await bot.send_messages(message=message, chat_id=chat_id)
+        except Exception as e:
+            print("Loi khi gui tin nhan telegram: ",e)
+            print(e)
+
+    def send_message_telegram(self, message, group="success", action=""):
+        content = self.root.config_message(message=message, action=action)
+        asyncio.run(self.send_message(message=content, group=group))
+    
+    def execute_script(self, script, element):
+        self.current_page.evaluate(script, element)
+    def isClosed(self):
+        return self.current_page.is_closed()
+    def set_cookies(self, cookies):
+        self.context.add_cookies(cookies)
+    def wait_selector(self, selector, timeount):
+        try:
+            self.current_page.wait_for_selector(selector, timeout=timeount)
+            return True
+        except TimeoutError:
+            self.logger.warning(f"Timeout waiting for element: {selector}")
+            return False
+    def click_text(
+        self,
+        text: str,
+        wait: int = 5000,           # thời gian chờ tối đa (ms)
+        exact: bool = True,         # True: khớp chính xác text, False: chứa text
+        position: str = "first",    # "first" hoặc "last" (hoặc "any" để click cái đầu tiên tìm thấy)
+    ):
+        """
+        Click vào element chứa đoạn text được cung cấp.
+        
+        :param text: Đoạn text cần click (ví dụ: "Đăng nhập", "Tiếp tục", "Xem thêm")
+        :param wait: Thời gian chờ element xuất hiện (ms), mặc định 5000
+        :param exact: True nếu phải khớp chính xác text, False nếu chỉ cần chứa text
+        :param position: "first" (mặc định), "last", hoặc "any" (click cái đầu tiên)
+        :return: True nếu click thành công, False nếu không tìm thấy hoặc lỗi
+        """
+        try:
+            # Tạo locator bằng get_by_text (ưu tiên cách này vì ổn định hơn XPath)
+            locator = self.current_page.get_by_text(text, exact=exact)
+            
+            # Chờ element xuất hiện và visible
+            locator.wait_for(state="visible", timeout=wait)
+            
+            # Xử lý theo position
+            if position == "last":
+                target_locator = locator.last
+            elif position == "first" or position == "any":
+                target_locator = locator.first
+            else:
+                raise ValueError("position chỉ hỗ trợ: 'first', 'last', 'any'")
+
+            # Kiểm tra tồn tại
+            if target_locator.count() == 0:
+                self.logger.warning(f"Không tìm thấy text '{text}' (exact={exact}, position={position})")
+                return False
+
+            # Scroll vào view và click an toàn
+            target_locator.scroll_into_view_if_needed()
+            
+            # Dùng click native của Playwright
+            target_locator.click()
+            
+            self.logger.info(f"Da click thanh cong vao text: '{text}' (position={position})")
+            return True
+
+        except TimeoutError:
+            self.logger.warning(f"Timeout cho text '{text}' sau {wait}ms")
+            return False
+        except Exception as e:
+            self.logger.error(f"Loi khi click text '{text}': {str(e)}")
+            return False
+        
+    def scroll_mouse(
+        self,
+        delta_y: float = 300,       # pixel cuộn dọc mỗi lần (dương: xuống, âm: lên)
+        delta_x: float = 0,         # pixel cuộn ngang (thường 0)
+        times: int = 1,             # số lần cuộn (để cuộn nhiều hơn)
+        delay: float = 0.3          # delay giữa các lần cuộn (giây) để giống người thật
+    ):
+        """
+        Giả lập cuộn chuột (mouse wheel) trên trang hiện tại.
+        
+        :param delta_y: Pixel cuộn dọc (dương: xuống dưới, âm: lên trên)
+        :param delta_x: Pixel cuộn ngang
+        :param times: Số lần thực hiện cuộn
+        :param delay: Thời gian chờ giữa các lần cuộn (giây)
+        """
+        try:
+            for _ in range(times):
+                self.current_page.mouse.wheel(delta_x=delta_x, delta_y=delta_y)
+                if delay > 0:
+                    sleep(delay)
+            
+            self.logger.info(f"Đã cuộn chuột: delta_y={delta_y}, times={times}")
+            
+        except Exception as e:
+            self.logger.error(f"Lỗi khi cuộn chuột: {e}")

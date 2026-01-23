@@ -1,0 +1,74 @@
+I. Giải thích thư mục
+tool_agent/
+│
+├── main.py                 # Entry point
+├── agent.py                # Khởi động agent + vòng đời
+│
+├── resources/
+│   ├── extensions/
+│   │   ├── fb_helper/
+│   │   │   ├── manifest.json
+│   │   │   ├── background.js
+│   │   │   └── content.js
+│   │   │
+│   │   ├── anti_detect/
+│   │   │   ├── manifest.json
+│   │   │   └── inject.js
+│   │   │
+│   │   └── captcha_solver/
+│   │
+│   └── chrome/
+│       └── chrome-win/
+│           ├── chrome.exe
+│           └── ...
+├── config/
+│   ├── settings.py         # Cấu hình chung
+│   ├── device.py           # ID máy, capabilities
+│
+├── network/
+│   ├── api.py              # Giao tiếp với server
+│   ├── ws_client.py        # WebSocket client
+│   ├── protocol.py         # Định nghĩa message schema
+│   └── dispatcher.py       # Điều phối message → handler
+│
+├── browser/
+│   ├── chrome.py          # Tạo trình duyệt
+│   ├── manager.py          # Quản lý browser / profile
+│   ├── context.py          # Playwright context
+│   ├── page.py             # Wrapper page
+│   └── human_input.py      # Click / type / scroll như người
+│
+├── tasks/                  # 🚨 NƠI MỞ RỘNG CHỨC NĂNG
+│   ├── __init__.py
+│   ├── base.py             # BaseTask (abstract)
+│   │
+│   ├── crawl_newsfeed/
+│   │   ├── task.py
+│   │   ├── planner.py
+│   │   └── extractor.py
+│   │
+│   ├── post_content/
+│   │   ├── task.py
+│   │   ├── composer.py
+│   │   └── uploader.py
+│   │
+│   └── manual_profile/
+│       ├── task.py
+│       └── bridge.py
+│
+├── vision/
+│   ├── model           # Lưu các file đã được huấn luyện AI
+│   ├── schema.py           # bbox / label / confidence
+│   └── mapper.py           # bbox → tọa độ click
+│
+├── state/
+│   ├── session.py          # trạng thái browser
+│   ├── task_state.py       # tiến độ task
+│   └── memory.py           # hành vi đã làm
+│
+├── utils/ Lưu các hàm dùng chung cho toàn hệ thống
+│   ├── logger.py
+│   ├── randomizer.py
+│   └── timer.py
+│
+└── requirements.txt

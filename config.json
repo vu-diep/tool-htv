@@ -1,0 +1,10 @@
+{
+    "driver": {
+        "headless": "false",
+        "omocaptcha_token": "OMO_YPTPQ1NI1ECAKCDU0XEKQIGXS4ZAYIAKDKT4MPGKQOGGT3KGFZMZO7XYHL1CDU1738834769",
+        "chat_telegram_id_tool_fb_success": "-1002493389024",
+        "chat_telegram_id_tool_fb_check": "-1002448273317"
+    },
+    "systems_id": 0,
+    "systems_name": "PC-Vu-Diep"
+}
