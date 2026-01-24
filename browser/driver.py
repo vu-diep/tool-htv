@@ -487,4 +487,4 @@ class Driver(ChromeManager):
         return text
     def page_source(self):
         html = self.current_page.content()
-        print(html)
+        return html

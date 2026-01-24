@@ -21,3 +21,5 @@ class Histories(Model):
     
     def update_count(self, history_id, data):
             return self.post(f"history-crawl-update-count/{history_id}", data=data)
+    def update(self, id, data):
+        return self.put(f"history-crawl-page/{id}", data=data)
