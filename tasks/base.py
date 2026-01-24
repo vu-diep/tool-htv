@@ -43,11 +43,17 @@ class Base(RootManager):
             # Trường hợp lỗi không mong muốn, có thể log lỗi nếu cần
             return False
 
-    def get_info_page(driver):
-        data = {}
+    def get_info_page(self, driver):
+        data = {
+            "like_counts": 0,
+            "follow_counts": 0,
+            "following_counts": 0,
+            "name": "",
+            "verified": 0,
+            "id_facebook": self.handle_get_id_page(driver),
+        }
         try:
             name = None
-            selectors = ["(//h1)/span/..", "(//h1)[last()]"]
             data_name_errors = [
                 "This site can’t be reached",
                 "Facebook",
@@ -55,16 +61,10 @@ class Base(RootManager):
                 "Home",
                 "Facebook is better on the app",
             ]
-            for selector in selectors:
+            for selector in xpaths.title_fanpages:
                 try:
-                    elem = driver.find(selector)
-                    name_page = elem.inner_text().strip()
-                    if name_page is None:
-                        text = driver.execute_script(
-                            "return arguments[0].innerText;", elem
-                        )
-                        if text:
-                            name_page = text.strip()
+                    elem = driver.find(selector, type_query="tag_name")
+                    name_page = driver.inner_text(elem).strip()
                     if name_page and name_page not in data_name_errors:
                         name = name_page
                         break
@@ -73,7 +73,7 @@ class Base(RootManager):
             data["name"] = name
 
             try:
-                verified_elements = name_page.find_all('.//*[@aria-label="Verified"]')
+                verified_elements = name_page.find_all(xpaths.verify_account)
                 if verified_elements:
                     data["verified"] = 1
                 else:
@@ -81,19 +81,19 @@ class Base(RootManager):
             except:
                 data["verified"] = 0
 
-            likes = driver.find("a[href*='friends_likes']", type_query="css")
+            likes = driver.find(xpaths.friends_likes, type_query = "css")
             if likes is not None:
-                data["like_counts"] = likes.inner_text()
+                data["like_counts"] = driver.inner_text(likes)
 
-            follows = driver.find("a[href*='followers']", type_query="css")
+            follows = driver.find(xpaths.followers, type_query = "css")
             if follows is not None:
-                data["follow_counts"] = follows.inner_text()
+                data["follow_counts"] = driver.inner_text(follows)
 
-            following = driver.find("a[href*='following']", type_query="css")
+            following = driver.find(xpaths.following, type_query = "css")
             if following is not None:
-                data["following_counts"] = following.inner_text()
+                data["following_counts"] = driver.inner_text(following)
 
-            return name
+            return data
         except Exception as e:
             raise e
 
@@ -197,22 +197,7 @@ class Base(RootManager):
 
         convert_url = ConvertUrl()
         try:
-            try:
-                seeMores = driver.find_all(xpaths.hasMore, parent=modal)
-                for see in seeMores:
-                    try:
-                        # Kiểm tra xem có thẻ <a> bên trong xem_them không
-                        has_a_tag = driver.find_all(
-                            "a", type_query="tag_name", parent=see
-                        )
-
-                        if not has_a_tag:
-                            see.click()
-                            self.random_sleep(3)
-                    except Exception as e:
-                        continue
-            except Exception as e:
-                print(f"Click see more khong thanh cong: {e}")
+            self.click_see_mores(driver=driver, parent=modal)
             content_link = []
             replace_content = []
             content = driver.find(xpaths.content, parent=modal)
@@ -319,16 +304,12 @@ class Base(RootManager):
         return None
 
     # hàm có tác dụng lấy thời gian
-    def get_time_up(self, driver):
+    def get_time_up(self, driver, modal):
         print("Start get time up")
         try:
-            actions_chains = driver.action_chains()
-            modal = self.find_modal(driver)
-            print("Get modal")
-            if modal is None:
-                raise Exception("Not found modal")
-
-            as_links = modal.find_all('a[role="link"][tabindex="0"]', type_query="css")
+            as_links = driver.find_all(
+                'a[role="link"][tabindex="0"]', type_query="css", parent=modal
+            )
 
             # Kiểm tra xem bài viết có được tài trợ không
             for a in as_links:
@@ -445,61 +426,75 @@ class Base(RootManager):
             num *= 1_000_000
         return num
 
+    def click_see_mores(self, driver, parent):
+        try:
+            seeMores = driver.find_all(xpaths.hasMore, parent=parent)
+            for see in seeMores:
+                try:
+                    # Kiểm tra xem có thẻ <a> bên trong xem_them không
+                    has_a_tag = driver.find_all("a", type_query="tag_name", parent=see)
+
+                    if not has_a_tag:
+                        see.click()
+                        self.random_sleep(3)
+                except Exception as e:
+                    continue
+        except Exception as e:
+            print(f"Click see more khong thanh cong: {e}")
+    
     def handle_get_id_page(self, driver):
         try:
-            # Chờ thêm thời gian để JavaScript render
+            # Chờ thêm thời gian để JavaScript render 
             sleep(5)
             # Scroll xuống để trigger lazy loading
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+            driver.scroll_mouse()
             sleep(2)
-
+            
             # Lấy page source
-            source = driver.page_source
-
+            source = driver.page_source()
+            
             # Danh sách các pattern để tìm page_id (từ phổ biến đến hiếm)
             patterns = [
-                r'"page_id":"(\d+)"',  # "page_id":"123456"
-                r'"page_id":(\d+)',  # "page_id":123456
-                r'page_id":"(\d+)"',  # page_id":"123456"
-                r'page_id":(\d+)',  # page_id":123456
-                r'"pageID":"(\d+)"',  # "pageID":"123456"
-                r'"pageID":(\d+)',  # "pageID":123456
-                r'"entity_id":"(\d+)"',  # "entity_id":"123456"
-                r'"entity_id":(\d+)',  # "entity_id":123456
-                r'"profile_id":"(\d+)"',  # "profile_id":"123456"
-                r'"profile_id":(\d+)',  # "profile_id":123456
-                r',"id":"(\d+)","page_id"',  # ,"id":"xxx","page_id" (lấy id trước page_id)
-                r'"id":"(\d{15,})"',  # ID dài hơn 15 số (thường là page/profile id)
+                r'"page_id":"(\d+)"',           # "page_id":"123456"
+                r'"page_id":(\d+)',             # "page_id":123456
+                r'page_id":"(\d+)"',            # page_id":"123456"
+                r'page_id":(\d+)',              # page_id":123456
+                r'"pageID":"(\d+)"',            # "pageID":"123456"
+                r'"pageID":(\d+)',              # "pageID":123456
+                r'"entity_id":"(\d+)"',         # "entity_id":"123456"
+                r'"entity_id":(\d+)',           # "entity_id":123456
+                r'"profile_id":"(\d+)"',        # "profile_id":"123456"
+                r'"profile_id":(\d+)',          # "profile_id":123456
+                r',"id":"(\d+)","page_id"',     # ,"id":"xxx","page_id" (lấy id trước page_id)
+                r'"id":"(\d{15,})"',            # ID dài hơn 15 số (thường là page/profile id)
             ]
-
+            
             # Thử từng pattern
             for i, pattern in enumerate(patterns):
                 matches = re.findall(pattern, source)
                 if matches:
                     # Lấy giá trị xuất hiện nhiều nhất (có thể là page_id chính)
                     from collections import Counter
-
                     most_common = Counter(matches).most_common(1)[0][0]
                     return most_common
-
+            
             meta_patterns = [
                 r'<meta[^>]+property="al:android:url"[^>]+content="fb://page/(\d+)"',
                 r'<meta[^>]+property="al:ios:url"[^>]+content="fb://page/(\d+)"',
             ]
-
+            
             for pattern in meta_patterns:
                 match = re.search(pattern, source)
                 if match:
                     return match.group(1)
-
-            long_ids = re.findall(r"\b(\d{15,16})\b", source)
+            
+            long_ids = re.findall(r'\b(\d{15,16})\b', source)
             if long_ids:
                 from collections import Counter
-
                 most_common_id = Counter(long_ids).most_common(1)[0][0]
-                return most_common_id
+                return most_common_id        
             return 0
-
+            
         except Exception as e:
             print("Loi khi lay page id: ", e)
             return None

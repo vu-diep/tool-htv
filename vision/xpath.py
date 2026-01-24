@@ -22,8 +22,10 @@ class Xpath:
     media = './/*[@data-ad-rendering-role="story_message"]/parent::div/following-sibling::div'
     dyamic = './/*[@data-visualcompletion="ignore-dynamic"]/div/div/div/div'
     hasMore = ".//div[text()='See more']"
-    comments = "//*[@aria-describedby and @aria-labelledby]//*[contains(@aria-label, 'Comment')]"
-    commentsMobile = ".//*[contains(@aria-label, 'Comment')]/.."
+    comments = [
+        "//*[@aria-describedby and @aria-labelledby]//*[contains(@aria-label, 'Comment')]",
+        ".//*[contains(@aria-label, 'Comment')]/..",
+    ]
     btn_follow = '//div[@data-ad-rendering-role="profile_name"]//div[@role="button"]//span[text() = "Follow"]'
     switch_page = [
         '//*[@aria-label="Switch Now"]',
@@ -41,11 +43,18 @@ class Xpath:
         "Rate this translation",  # Xếp hạng bản dịch này
     ]
     a = ".//a"
+    ancestor_a = "./ancestor::a"
     img = ".//img"
+    img_feedImage = ".//img[@data-imgperflogname='feedImage']"
     video = ".//video"
     comment_element = '//div[@role="button" and @aria-expanded="true"]//span[contains(text(), "comments")]'
     shares_element = '(//div[@role="button"]//span[contains(text(), "shares")])[last()]'
-
+    all_reactions = '(//div[text()="All reactions:"]/..)[last()]'
+    div_elements = "./div"
+    img_element = "preceding-sibling::img"
+    link_comment_elements = './/*[contains(@aria-label, "Comment")]/..//span[@role="link" and @data-focusable="true"]'
+    title_fanpages = ["(//h1)/span/..", "(//h1)[last()]"]
+    profile_name = '(//div[@data-ad-rendering-role="profile_name"])[last()]'
 
 class XpathLogin:
     input_login = [
@@ -100,7 +109,6 @@ class XpathLogin:
         "(//*[contains(text(), 'Continue')])[last()]",
         "(//*[contains(text(), 'Tiếp tục')])[last()]",
     ]
-
 
 xpaths = Xpath()
 xpath_login = XpathLogin()

@@ -213,23 +213,12 @@ class Driver(ChromeManager):
                 os.remove(img_path)
                 print("Danh da bi xoa.")
     
-    def click_script(self, element, wait=0.5):
+    def click_script(self, locator, wait=0.5):
         try:
-            if not element:
-                print("Phần tử không tồn tại:", element)
-                return
-
-            # Scroll vào view
-            self.current_page.evaluate("el => el.scrollIntoView({block: 'center', inline: 'center'})", element)
-            # hoặc giữ nguyên cách cũ của bạn
-            # self.current_page.evaluate("el => el.scrollIntoView(true)", element)
-
-            import time
-            time.sleep(wait)
-
-            # Click bằng JS
-            self.current_page.evaluate("el => el.click()", element)
-
+            locator.wait_for(state="visible", timeout=5000)
+            locator.scroll_into_view_if_needed()
+            sleep(wait)
+            locator.click(force=True)
         except Exception as e:
             raise Exception(f"Lỗi click: {e}") from e
         
@@ -410,6 +399,24 @@ class Driver(ChromeManager):
             
         except Exception as e:
             self.logger.error(f"Lỗi khi cuộn chuột: {e}")
+
+    def scroll_to_locator(
+        self,
+        locator,
+        timeout: int = 5000,
+    ):
+        """
+        Cuộn chuột từng bước cho tới khi locator xuất hiện trong viewport
+
+        :param locator: Playwright Locator
+        :param timeout: thời gian đợi tối đa
+        """
+        try:
+            locator.scroll_into_view_if_needed(timeout=timeout)
+
+        except Exception as e:
+            self.logger.error(f"Lỗi scroll tới locator: {e}")
+            return False
             
     def js_hover_and_focus(self, locator: Locator):
         try:
@@ -458,4 +465,26 @@ class Driver(ChromeManager):
         except Exception as e:
             print("Hover & focus error:", e)
             return False
-
+    
+    def close_modal(self, index=0, last=False, type='//*[@aria-label="Close"]'):
+        try:
+            modals = self.find_all(type)
+            if len(modals) > index:
+                if last:
+                    self.click_script(modals[-1])
+                else:
+                    self.click_script(modals[index])
+        except Exception as e:
+            print(f"Loi click modal: ", e)
+    
+    def inner_text_js(self, locator):
+        text = locator.evaluate("el => el.textContent")
+        return text
+    def inner_text(self, locator):
+        text = locator.inner_text()
+        if text is None:
+            text = self.inner_text_js(locator=locator)
+        return text
+    def page_source(self):
+        html = self.current_page.content()
+        print(html)

@@ -203,7 +203,7 @@ class CrawlNewsfeed(Base):
             )
 
             driver = Driver(profile, startUrl=False)  # Khởi tạo trình duyệt với profile
-            # đánh dấu số lần upload profile lên server
+            # Tạo vòng đời
             while not stop_event.is_set():
                 start_time = time()
                 self.config["start_time"] = start_time
@@ -214,9 +214,9 @@ class CrawlNewsfeed(Base):
                     print("Trinh duyet bi dong khoi dong lai: ")
                     driver = Driver(profile, startUrl=False)
 
-                # xác định thời gian chạy và thời gian ngủ
                 # đánh dấu số lần thử login lại
                 driver.action_send_error = root
+                # xác định thời gian chạy và thời gian ngủ
                 while time() - start_time < time_run and not stop_event.is_set():
                     tab["check"] = 1
                     tab["status_process"] = 1
@@ -327,53 +327,48 @@ class CrawlNewsfeed(Base):
                             )
 
                         print("Dang chuyen huong Facebook")
-                        while (
-                            time() - start_time < time_run and not stop_event.is_set()
-                        ):
-                            # nếu vị trí mà chưa vượt ra ngoài mảng keywords thì tiếp tục lấy keyword tại vị trí hiện tại
-                            if indexKeywords < len(keywords) and search == True:
-                                keyword = keywords[indexKeywords]
-                                indexKeywords += 1
-                                self.render_and_search_keywords(
-                                    keyword["keyword"], driver
-                                )
-                            else:
-                                # Khi đã vượt ra ngoài rồi mà đang trong chức năng search thì reset indexKeywords về 0 để tiếp tục tìm lại từ đầu keyword
-                                if search == True:
-                                    indexKeywords = 0
+                        # nếu vị trí mà chưa vượt ra ngoài mảng keywords thì tiếp tục lấy keyword tại vị trí hiện tại
+                        if indexKeywords < len(keywords) and search == True:
+                            keyword = keywords[indexKeywords]
+                            indexKeywords += 1
+                            self.render_and_search_keywords(keyword["keyword"], driver)
+                        else:
+                            # Khi đã vượt ra ngoài rồi mà đang trong chức năng search thì reset indexKeywords về 0 để tiếp tục tìm lại từ đầu keyword
+                            if search == True:
+                                indexKeywords = 0
 
-                            socket(
-                                id=id,
-                                message=f"Bắt đầu lấy bài viết...",
-                                tool_activity_logs_id=tool_activity_logs_id,
-                                status=1,
+                        socket(
+                            id=id,
+                            message=f"Bắt đầu lấy bài viết...",
+                            tool_activity_logs_id=tool_activity_logs_id,
+                            status=1,
+                        )
+                        try:
+                            self.config["keywords"] = keywords
+                            self.config["name_page"] = name_page
+                            self.config["comments"] = comments
+                            self.config["list_link_page_not_crawl"] = (
+                                list_link_page_not_crawl
                             )
-                            try:
-                                self.config["keywords"] = keywords
-                                self.config["name_page"] = name_page
-                                self.config["comments"] = comments
-                                self.config["list_link_page_not_crawl"] = (
-                                    list_link_page_not_crawl
-                                )
-                                self.config["params"] = params
-                                driver.get("https://facebook.com", e_wait=3)
-                                if driver.os_type_web:
-                                    self.handle_craw_web(driver, stop_event)
-                                elif driver.os_type_mobile:
-                                    self.handle_craw_mobile(driver, stop_event)
-                                self.random_sleep()
-                                continue
-                            except Exception as e:
-                                print("Loi lay bai viet that bai:", e)
-                                traceback.print_exc()
-                                # socket(
-                                #     id=id,
-                                #     message=f"Lấy bài viết thất bại",
-                                #     tool_activity_logs_id=tool_activity_logs_id,
-                                #     status=1,
-                                # )
-                                # driver.send_image_error(f"Lấy bài viết thất bại: {e}")
-                            break
+                            self.config["params"] = params
+                            driver.get("https://facebook.com", e_wait=3)
+                            if driver.os_type_web:
+                                self.handle_craw_web(driver, stop_event)
+                            elif driver.os_type_mobile:
+                                self.handle_craw_mobile(driver, stop_event)
+                            self.random_sleep()
+                            continue
+                        except Exception as e:
+                            print("Loi lay bai viet that bai:", e)
+                            traceback.print_exc()
+                            # socket(
+                            #     id=id,
+                            #     message=f"Lấy bài viết thất bại",
+                            #     tool_activity_logs_id=tool_activity_logs_id,
+                            #     status=1,
+                            # )
+                            # driver.send_image_error(f"Lấy bài viết thất bại: {e}")
+                        break
                     except Exception as e:
                         socket(
                             id=id,
@@ -547,13 +542,13 @@ class CrawlNewsfeed(Base):
                 list_posts = driver.find_all(xpath)
                 if list_posts:
                     break
-            list_articles = self.get_list_post_web(driver=driver, stop_event=stop_event)
-            print("list_articles: ", json.dumps(list_articles, indent=4))
-            return
+            article = self.get_list_post_web(driver=driver, stop_event=stop_event)
+            print("article: ", json.dumps(article, indent=4))
+            return 
             try:
                 # gửi dữ liệu sau khi lấy đủ 10 bài viết
                 responseAddHistory = self.histories.createNewsFeed(
-                    {"account_id": account.get("id"), "counts": len(list_articles)}
+                    {"account_id": account.get("id"), "counts": len(article)}
                 )
                 socket(
                     id=id,
@@ -574,70 +569,41 @@ class CrawlNewsfeed(Base):
                     status=1,
                 )
                 return
-            i = 0
-            # lặp qua đường link chi tiết rồi lấy ra bài viết
-            while i < len(list_articles) and not stop_event.is_set():
-                article = list_articles[i]
-                try:
+            try:
+                article = self.crawl_content_page(driver, article)
+                if article:
+                    # lấy ra page vừa lấy
+                    article["idHistoryCrawPage"] = idHistory
+                    print("Dang gui du lieu len server")
                     socket(
                         id=id,
-                        message=f"Đang thực hiện chuyển hướng lấy bài viết",
+                        message="Đang gửi dữ liệu lên server",
                         tool_activity_logs_id=tool_activity_logs_id,
                         status=1,
                     )
-                    post_fb_link = article.get("post_fb_link")
-                    print("Dang thuc hien chuyen huong lay bai viet: ", post_fb_link)
-                    driver.get(post_fb_link, e_wait=3)
-
-                    # kiểm tra trang web có bị lỗi không nếu lỗi thì bỏ qua
-                    page_exists = self.check_not_fount_page(driver)
-                    if page_exists:
-                        socket(
-                            id=id,
-                            message=f"Bài viết không khả dụng hoặc đã bị xóa",
-                            tool_activity_logs_id=tool_activity_logs_id,
-                            status=1,
-                        )
-                        i += 1
-                        self.histories.updateValidCrawlNewsFeed(idHistory, {})
-                        continue
-                    article = self.crawl_content_page(driver, article)
-                    if article:
-                        # lấy ra page vừa lấy
-                        article["idHistoryCrawPage"] = idHistory
-                        print("Dang gui du lieu len server")
-                        socket(
-                            id=id,
-                            message="Đang gửi dữ liệu lên server",
-                            tool_activity_logs_id=tool_activity_logs_id,
-                            status=1,
-                        )
-                        response = self.posts.add_post_newsfeed(
-                            {"data": article}, params
-                        )
-                        print("Da gui du lieu len server: ", response)
-                        socket(id, response["message"], 1)
-                    else:
-                        responseUpdateHistory = self.histories.updateValidCrawlNewsFeed(
-                            idHistory, {}
-                        )
-                        socket(
-                            id=id,
-                            message=responseUpdateHistory["message"],
-                            tool_activity_logs_id=tool_activity_logs_id,
-                            status=1,
-                        )
-                    i += 1
-                except Exception as e:
-                    content = f"Tài khoản: {account.get("name")} - Fanpage: {page.get("name")}  - Lỗi lấy bài viết: {e}"
-                    driver.send_image_error(content)
-                    print(f"Loi luu bai viet: {e}")
+                    response = self.posts.add_post_newsfeed({"data": article}, params)
+                    print("Da gui du lieu len server: ", response)
+                    socket(id, response["message"], 1)
+                else:
+                    responseUpdateHistory = self.histories.updateValidCrawlNewsFeed(
+                        idHistory, {}
+                    )
                     socket(
                         id=id,
-                        message=f"Lỗi lấy bài viết vui lòng gọi IT",
+                        message=responseUpdateHistory["message"],
                         tool_activity_logs_id=tool_activity_logs_id,
                         status=1,
                     )
+            except Exception as e:
+                content = f"Tài khoản: {account.get("name")} - Fanpage: {page.get("name")}  - Lỗi lấy bài viết: {e}"
+                driver.send_image_error(content)
+                print(f"Loi luu bai viet: {e}")
+                socket(
+                    id=id,
+                    message=f"Lỗi lấy bài viết vui lòng gọi IT",
+                    tool_activity_logs_id=tool_activity_logs_id,
+                    status=1,
+                )
             self.histories.update(idHistory, {"status": 2})
         except Exception as e:
             raise Exception(e)
@@ -690,21 +656,12 @@ class CrawlNewsfeed(Base):
                     print("content_link: ", content_link)
                     sleep(self.random_seconds())
                     matched_keywords = []
-                    # if filter_keyword:
-                    #     normalized_content = self.remove_accents(content.lower())
-                    #     for kw in keywords:
-                    #         keyword_text = kw["keyword"]
-                    #         normalized_keyword = self.remove_accents(
-                    #             keyword_text.lower()
-                    #         )
-
-                    #         # Kiểm tra trong nội dung bài viết
-                    #         if normalized_keyword in normalized_content:
-                    #             matched_keywords.append(kw)
-                    #             continue  # khỏi cần kiểm tra trong comment nữa nếu đã thấy
-                    #     # nếu không tìm thấy keyword thì bỏ qua
-                    #     if len(matched_keywords) == 0:
-                    #         continue
+                    if filter_keyword:
+                        matched_keywords = self.filter_keywords(
+                            content=content, keywords=keywords
+                        )
+                        if len(matched_keywords) == 0:
+                            continue
                     # thu thập đường link
                     idAreaPost = (
                         modal.get_attribute("aria-posinset")
@@ -734,27 +691,45 @@ class CrawlNewsfeed(Base):
                                     continue
                                 href = self.convert_url.clean_url_keep_params(href)
                                 link_time = link.inner_text().strip()
+                                print("link_time: ", link_time)
                                 try:
                                     converTime = self.convert_to_db_format(link_time)
                                 except:
                                     converTime = None
+                                print("converTime: ", converTime)
 
                                 post_id = self.get_post_id(href, converTime)
                                 print("post_id: ", post_id)
                                 if post_id == "" or post_id in list_post_id:
                                     continue
-
-                                list_article.append(
-                                    {
-                                        "post_fb_id": post_id,
-                                        "post_fb_link": href,
-                                        "matched_keywords": matched_keywords,
-                                        "content": content,
-                                        "content_link": content_link,
-                                        "media": dataMedia,
-                                    }
+                                link.click()
+                                # Lấy số lượng cảm xúc và bình luận
+                                print("dang lay tuong tac bai viet")
+                                numberOfReactionsAndComments = (
+                                    self.get_number_of_reactions_and_comments(driver, modal)
                                 )
-                                list_post_id.append(post_id)
+                                print("dang lay binh luan bai viet")
+                                print("numberOfReactionsAndComments: ", json.dumps(numberOfReactionsAndComments, indent=4))
+                                # Lấy bình luận
+                                comments, has_link_in_comments = self.get_comments(
+                                    modal, driver
+                                )
+                                # Thực hiện xem chi tiết ảnh
+                                self.views_image(dataMedia["images"], driver, modal)
+                                sourcePost = self.get_source_post(driver, modal)
+                                print("source_post: ", sourcePost)
+                                article = {
+                                    "post_fb_id": post_id,
+                                    "link_facebook": href,
+                                    "matched_keywords": matched_keywords,
+                                    "content": content,
+                                    "content_link": content_link,
+                                    "media": dataMedia,
+                                    "number_of_reactions": numberOfReactionsAndComments,
+                                    "comments": comments,
+                                    "source_post": sourcePost,
+                                }
+                                return article
 
                     if stop_event.is_set():
                         break
@@ -766,6 +741,19 @@ class CrawlNewsfeed(Base):
             sleep(self.random_seconds())
 
         return list_article
+
+    def filter_keywords(self, content, keywords):
+        matched_keywords = []
+        normalized_content = self.remove_accents(content.lower())
+        for kw in keywords:
+            keyword_text = kw["keyword"]
+            normalized_keyword = self.remove_accents(keyword_text.lower())
+
+            # Kiểm tra trong nội dung bài viết
+            if normalized_keyword in normalized_content:
+                matched_keywords.append(kw)
+        # nếu không tìm thấy keyword thì bỏ qua
+        return matched_keywords
 
     def crawl_content_page(self, driver, article):
 
@@ -833,7 +821,9 @@ class CrawlNewsfeed(Base):
             data["content_link"] = content_link
         data["media"] = dataMedia
         # Lấy số lượng cảm xúc và bình luận
-        numberOfReactionsAndComments = self.get_number_of_reactions_and_comments(modal)
+        numberOfReactionsAndComments = self.get_number_of_reactions_and_comments(
+            driver, modal
+        )
         data["number_of_reactions"] = numberOfReactionsAndComments
         data["link_facebook"] = article["post_fb_link"]
 
@@ -870,28 +860,34 @@ class CrawlNewsfeed(Base):
         return data
 
     # lấy số lượng cảm xúc và bình luận
-    def get_number_of_reactions_and_comments(self, modal):
+    def get_number_of_reactions_and_comments(self, driver, modal):
         data = {
             "comment": 0,
             "like": 0,
             "share": 0,
         }
         try:
-            all_reactions = modal.find('(//div[text()="All reactions:"]/..)[last()]')
+            all_reactions = driver.find(
+                xpaths.all_reactions, type_query="tag_name", parent=modal
+            )
             like = all_reactions.inner_text()
             like = self.convert_shorthand_to_number(like)
             data["like"] = like
         except Exception as e:
             print(f"Khong lay duoc like")
         try:
-            comment_element = modal.find(xpaths.comment_element)
+            comment_element = driver.find(
+                xpaths.comment_element, type_query="tag_name", parent=modal
+            )
             comment = comment_element.inner_text()
             comment = self.convert_shorthand_to_number(comment)
             data["comment"] = comment
         except Exception as e:
             print(f"Khong lay duoc comments")
         try:
-            shares_element = modal.find(xpaths.shares_element, type_query = "tag_name")
+            shares_element = driver.find(
+                xpaths.shares_element, type_query="tag_name", parent=modal
+            )
             shares = shares_element.inner_text()
             shares = self.convert_shorthand_to_number(shares)
             data["share"] = shares
@@ -902,7 +898,7 @@ class CrawlNewsfeed(Base):
             print(f"Khong lay duoc like, comment, share: {e}")
         return data
 
-    def get_comments(self, modal, driver, linkItem):
+    def get_comments(self, modal, driver):
         print("Bat dau lay comment")
         data = []
         has_link_in_comments = False
@@ -912,33 +908,24 @@ class CrawlNewsfeed(Base):
             type_element = "commentsMobile"
         try:
             scroll = driver.find(xpaths.scroll)
-            driver.execute_script(
-                "arguments[0].scrollTop = arguments[0].scrollHeight;", scroll
-            )
+            driver.scroll_to_locator(scroll)
             print("Cuon chuot xuong (tim thay element scroll)")
         except Exception as e:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            driver.scroll_mouse()
             print("Cuon chuot xuong bang window: ", e)
         sleep(3)
 
         try:
-            comments = modal.find_all(getattr(xpaths, type_element))
+            comments = None
+            for xpath_comment in xpaths.comments:
+                comments = driver.find_all(xpath_comment, parent=modal)
+                if comments is not None:
+                    break
             print(f"Tim thay {len(comments)} binh luan")
             # xu ly các phần tử "Xem thêm"
             for cm in comments:
-                driver.execute_script(
-                    "arguments[0].scrollTop = arguments[0].scrollHeight;", cm
-                )
-                try:
-                    xem_them = cm.find(xpaths.hasMore)
-                    if xem_them:
-                        # Kiểm tra xem có thẻ <a> bên trong xem_them không
-                        has_a_tag = xem_them.find_all("a", type_query="tag_name")
-
-                        if not has_a_tag:
-                            driver.execute_script("arguments[0].click();", xem_them)
-                except:
-                    pass
+                driver.scroll_to_locator(cm)
+                self.click_see_mores(driver=driver, parent=cm)
 
             countComment = 0
             for cm in comments:
@@ -948,13 +935,12 @@ class CrawlNewsfeed(Base):
                 textComment = ""
                 link_comment = []
                 try:
-                    div_elements = cm.find_all("./div")
+                    div_elements = driver.find_all(xpaths.div_elements, parent=cm)
                     if len(div_elements) < 2:
                         print("Khong co du 2 the div ben trong comment, bo qua.")
                         continue  # Bỏ qua nếu không có đủ phần tử
 
-                    div_2 = div_elements[1].find_all("./div")
-
+                    div_2 = driver.find_all(xpaths.div_elements, parent=div_elements[1])
                     if len(div_2) == 0:
                         print("Khong co phan tu ben trong div 2, bo qua.")
                         continue  # Không có phần tử bên trong, bỏ qua
@@ -966,16 +952,19 @@ class CrawlNewsfeed(Base):
                         continue  # Không có nội dung, bỏ qua
 
                     # Lấy danh sách thẻ <a>
-                    a_tags = div_2[1].find_all(".//a") if len(div_2) > 1 else []
+                    a_tags = (
+                        driver.find_all(xpaths.a, parent=div_2[1])
+                        if len(div_2) > 1
+                        else []
+                    )
                     if not a_tags:
-                        a_tags = div_2[0].find_all(".//a")
-
+                        a_tags = driver.find_all(xpaths.a, parent=div_2[0])
                     for a in a_tags:
                         try:
                             # Kiểm tra xem thẻ <a> có thẻ <img> phía trước không
                             img_element = None
                             try:
-                                img_element = a.find("preceding-sibling::img")
+                                img_element = driver.find(xpaths.img_element, parent=a)
                             except:
                                 pass
 
@@ -987,7 +976,7 @@ class CrawlNewsfeed(Base):
                                 href = a.get_attribute("href")
                                 if (
                                     href
-                                    and self.convert_url.is_valid_link(href, linkItem)
+                                    and self.convert_url.is_valid_link(href)
                                     and href not in link_comment
                                 ):
                                     link_comment.append(href)
@@ -997,14 +986,14 @@ class CrawlNewsfeed(Base):
                     # lấy link theo kiểm mobile
                     if driver.os_type_mobile:
                         try:
-                            link_comment_elements = cm.find_all(
-                                './/*[contains(@aria-label, "Comment")]/..//span[@role="link" and @data-focusable="true"]'
+                            link_comment_elements = driver.find_all(
+                                xpaths.link_comment_elements, parent=cm
                             )
                             if link_comment_elements:
                                 href = link_comment_elements[0].inner_text().strip()
                                 if (
                                     href
-                                    and self.convert_url.is_valid_link(href, linkItem)
+                                    and self.convert_url.is_valid_link(href)
                                     and href not in link_comment
                                 ):
                                     link_comment.append(href)
@@ -1067,55 +1056,29 @@ class CrawlNewsfeed(Base):
 
                     # Tìm <img> có src giống với ảnh trong modal
                     try:
-                        link = modal.find(f".//img[@src='{img}']")
-                    except Exception:
+                        link = driver.find(xpaths.img_feedImage, parent=modal)
+                        # Tìm thẻ <a> cha bao quanh <img>
+                        link_element = driver.find(xpaths.ancestor_a, parent=link)
+                        href = link_element.get_attribute("href")  # Lấy href của thẻ <a>
+                        print("href: ", href)
+                        # Nếu href không phải của Facebook thì bỏ qua
+                        if not href.startswith("https://www.facebook.com/"):
+                            print(f"⛔ Link ngoai, khong click: {href}")
+                            continue  # Bỏ qua link ngoài
+                        # Kiểm tra xem ảnh có thuộc quảng cáo không
+                        ad_element = driver.find("./ancestor::div[@data-ad-rendering-role='image']",parent=link)
+                        if ad_element is not None:
+                            continue
+                        # Click vào ảnh nếu hợp lệ
+                        link.scroll_into_view_if_needed()
+                        driver.click_script(link)
+                    except Exception as  e:
                         print(f"⚠️ Khong tim thay anh: {img}")
+                        traceback.print_exc()
                         continue  # Bỏ qua nếu không tìm thấy ảnh
-
-                    # Tìm thẻ <a> cha bao quanh <img>
-                    try:
-                        link_element = link.find("./ancestor::a")
-                        href = link_element.get_attribute(
-                            "href"
-                        )  # Lấy href của thẻ <a>
-                    except Exception:
-                        print("Khong tim thay the <a> bao quanh anh.")
-                        continue  # Bỏ qua nếu không có thẻ <a>
-
-                    # Nếu href không phải của Facebook thì bỏ qua
-                    if not href.startswith("https://www.facebook.com/"):
-                        print(f"⛔ Link ngoai, khong click: {href}")
-                        continue  # Bỏ qua link ngoài
-
-                    # Kiểm tra xem ảnh có thuộc quảng cáo không
-                    try:
-                        ad_element = link.find(
-                            "./ancestor::div[@data-ad-rendering-role='image']"
-                        )
-                        print("anh thuoc quang cao! Khong click vao anh nay.")
-                        continue  # Bỏ qua nếu ảnh thuộc quảng cáo
-                    except:
-                        pass  # Không có quảng cáo thì tiếp tục
-
-                    # Click vào ảnh nếu hợp lệ
-                    # try:
-                    #     WebDriverWait(driver, 10).until(
-                    #         EC.element_to_be_clickable(link)
-                    #     ).click()
-                    # except Exception as e:
-                    #     print(f"Khong the click vao anh")
-                    #     continue
-                    # sleep(3)
-                    driver.closeModal(0, True)
+                    
+                    driver.close_modal(last=True)
                     sleep(1)
-
-                    # Đóng các tab thừa nếu có
-                    # while len(driver.window_handles) > 1:
-                    #     for handle in driver.window_handles[1:]:
-                    #         driver.switch_to.window(handle)
-                    #         driver.close()
-                    #     driver.switch_to.window(driver.window_handles[0])
-
                 except Exception as e:
                     print(f"Loi khi xem anh: {e}")
                     continue
@@ -1126,16 +1089,14 @@ class CrawlNewsfeed(Base):
             print("Dang lay duong link profile")
 
             # Lấy đường dẫn tới profile
-            proficeName = modal.find(
-                '(//div[@data-ad-rendering-role="profile_name"])[last()]'
-            )
-            a_element = proficeName.find("a", type_query="tag_name")
+            proficeName = driver.find( xpaths.profile_name, parent=modal, type_query="tag_name")
+            a_element = driver.find("a", type_query="tag_name", parent=proficeName)
             a_href = a_element.get_attribute("href")
 
             data["link"] = self.convert_url.extract_clean_url_profile(a_href)
 
             if a_href:
-                driver.get(a_href, e_wait=10)
+                a_element.click()
 
                 # Lấy các thông tin của page
                 info_page = self.get_info_page(driver)
@@ -1148,6 +1109,7 @@ class CrawlNewsfeed(Base):
             return data
         except Exception as e:
             print(f"Loi khi lay nguon goc bai viet: {e}")
+            traceback.print_exc()
             return {}
 
     def handle_craw_mobile(self, driver, stop_event):

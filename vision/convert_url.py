@@ -66,14 +66,14 @@ class ConvertUrl:
                 return query_params['u'][0]
         return url
 
-    def is_valid_link(self, href, post, check = 'post_fb_id'):
+    def is_valid_link(self, href):
         """
         Kiểm tra xem URL có hợp lệ hay không:
         - Không chứa post_fb_id của bài viết.
         - Không phải là một tệp GIF.
         - Không phải là một URL của Facebook.
         """
-        return post[check] not in href and '.gif' not in href and 'https://www.facebook.com' not in href
+        return href and '.gif' not in href and 'https://www.facebook.com' not in href
     
     # Hàm có tác dụng làm gọn url trong việc lấy ra url của profile
     def extract_clean_url_profile(self, url):
