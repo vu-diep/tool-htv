@@ -150,8 +150,8 @@ def test_single_image(model_path: str, image_path: str):
 if __name__ == "__main__":
     
     # 🔧 CẤU HÌNH - THAY ĐỔI Ở ĐÂY
-    MODEL_PATH = "D:/CongViec/tool-htv-after/vision/models/best.pt"
-    IMAGE_PATH = "D:/CongViec/tool-htv-after/Test_001.jpg"
+    MODEL_PATH = "C:\\Users\\PC\\Downloads\\best.pt"
+    IMAGE_PATH = "C:\\Users\\PC\\Downloads\\Dataset Yolo\\test\\images\\image_024.png"
     
     # 🚀 CHẠY TEST
     print("🚀 Bắt đầu test model...")
