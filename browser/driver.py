@@ -93,11 +93,11 @@ class Driver(ChromeManager):
         locator = scope.locator(selector).first
 
         try:
-            locator.wait_for(state="attached", timeout=wait)
+            scope.locator(selector).first.wait_for(timeout=wait)
         except TimeoutError:
             self.logger.warning(f"Element NOT FOUND: {query}")
             return None
-
+        locator.scroll_into_view_if_needed()
         if not locator.is_visible():
             self.logger.warning(f"Element found but NOT visible: {query}")
             return None
@@ -120,7 +120,6 @@ class Driver(ChromeManager):
             selector = self.build_selector(query, type_query)
             scope = parent if parent else self.current_page
             locator = scope.locator(selector)
-            
             if type_query == "xpath" and selector.startswith(".//") and parent:
                 selector = selector[1:]  # .// -> //
             # Wait element đầu tiên
@@ -488,3 +487,5 @@ class Driver(ChromeManager):
     def page_source(self):
         html = self.current_page.content()
         return html
+    def check_dom(self, locator):
+        return locator.count() > 0

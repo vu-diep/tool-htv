@@ -498,3 +498,10 @@ class Base(RootManager):
         except Exception as e:
             print("Loi khi lay page id: ", e)
             return None
+    
+    def back_home(self, driver):
+        if driver.os_type_mobile:
+            home = driver.find(xpaths.back)
+        else:
+            home = driver.find(xpaths.home)
+        driver.click_script(home)

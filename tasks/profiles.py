@@ -20,7 +20,7 @@ class Profiles:
 
         try:
             driver = Driver(profile=profile, headless=False)
-
+            driver.get('https://www.facebook.com/m.mmy.s.n.2025/posts/pfbid02q2Lw5Gs2A7vWeyav7ZXZob7EPv5ecjez9A1sAc2ws618DRE1vGEQEzpfnPpYoS4ql')
             self.socket_profile(id, status="Đã khởi tạo trình duyệt", check=1)
 
             while not stop_event.is_set():

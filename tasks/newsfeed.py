@@ -4,6 +4,7 @@ import re
 import json
 import threading
 import traceback
+from lxml import etree
 
 from network.api.servers.accounts import Account
 from network.api.servers.pages import Pages
@@ -534,11 +535,15 @@ class CrawlNewsfeed(Base):
                 for xpath in xpaths.list_posts:
                     list_posts = driver.find_all(xpath)
                     if list_posts:
+                        print("modal: ", xpath)
                         break
                 len_list_post = len(list_posts)
                 print("len_list_post: ", len_list_post)
                 for modal in list_posts:
                     try:
+                        # nếu modal đã k còn thì bỏ qua
+                        if driver.check_dom(modal) == False:
+                            continue
                         # cuộn chuột đến bài post
                         modal.scroll_into_view_if_needed()
                         sleep(1)
@@ -591,15 +596,11 @@ class CrawlNewsfeed(Base):
                                         continue
                                     href = self.convert_url.clean_url_keep_params(href)
                                     link_time = link.inner_text().strip()
-                                    print("link_time: ", link_time)
                                     try:
                                         converTime = self.convert_to_db_format(link_time)
                                     except:
                                         converTime = None
-                                    print("converTime: ", converTime)
-
                                     post_id = self.get_post_id(href, converTime)
-                                    print("post_id: ", post_id)
                                     if post_id == "" or post_id in list_post_id:
                                         continue
                                     driver.click_script(link)
@@ -635,6 +636,8 @@ class CrawlNewsfeed(Base):
                                     socket(id, response["message"], 1)
                                     quantity_post +=1
                                     self.histories.update(id=history_id, data={'counts': quantity_post})
+                                    # quay trở về trang chủ
+                                    self.back_home(driver=driver)
                     except Exception as e:
                         print(f"Phan tu khong ton tai, tim lai phan tu: {e}")
                         traceback.print_exc()
@@ -964,13 +967,12 @@ class CrawlNewsfeed(Base):
         data = []
         has_link_in_comments = False
         removeComment = ["·", "Author\n", "  ", "Top fan", "Follow"]
-        type_element = "comments"
-        if driver.os_type_mobile:
-            type_element = "commentsMobile"
+        
         try:
-            scroll = driver.find(xpaths.scroll)
-            driver.scroll_to_locator(scroll)
-            print("Cuon chuot xuong (tim thay element scroll)")
+            comment_button = driver.find(xpaths.comment_button)
+            if comment_button is not None:
+                driver.scroll_to_locator(comment_button)
+            print("Cuon chuot xuong (tim thay element scroll): ", comment_button)
         except Exception as e:
             driver.scroll_mouse()
             print("Cuon chuot xuong bang window: ", e)
@@ -978,11 +980,20 @@ class CrawlNewsfeed(Base):
 
         try:
             comments = None
+            # Thử lấy comments bằng cách thông thường
             for xpath_comment in xpaths.comments:
                 comments = driver.find_all(xpath_comment, parent=modal)
-                if comments is not None:
+                if len(comments) > 0:
                     break
             print(f"Tim thay {len(comments)} binh luan")
+            
+            # Nếu không lấy được comments, sử dụng fallback method
+            if len(comments) == 0:
+                print("Khong lay duoc comments bang cach thuong, su dung fallback method...")
+                data, has_link_in_comments = self._parse_comments_from_html(driver, modal)
+                return data, has_link_in_comments
+            
+            # Xử lý comments theo cách thông thường
             # xu ly các phần tử "Xem thêm"
             for cm in comments:
                 driver.scroll_to_locator(cm)
@@ -999,18 +1010,18 @@ class CrawlNewsfeed(Base):
                     div_elements = driver.find_all(xpaths.div_elements, parent=cm)
                     if len(div_elements) < 2:
                         print("Khong co du 2 the div ben trong comment, bo qua.")
-                        continue  # Bỏ qua nếu không có đủ phần tử
+                        continue
 
                     div_2 = driver.find_all(xpaths.div_elements, parent=div_elements[1])
                     if len(div_2) == 0:
                         print("Khong co phan tu ben trong div 2, bo qua.")
-                        continue  # Không có phần tử bên trong, bỏ qua
+                        continue
 
                     textComment = div_2[0].inner_text().strip()
 
                     if textComment == "":
                         print("Khong co noi dung comment, bo qua.")
-                        continue  # Không có nội dung, bỏ qua
+                        continue
 
                     # Lấy danh sách thẻ <a>
                     a_tags = (
@@ -1022,7 +1033,6 @@ class CrawlNewsfeed(Base):
                         a_tags = driver.find_all(xpaths.a, parent=div_2[0])
                     for a in a_tags:
                         try:
-                            # Kiểm tra xem thẻ <a> có thẻ <img> phía trước không
                             img_element = None
                             try:
                                 img_element = driver.find(xpaths.img_element, parent=a)
@@ -1030,9 +1040,7 @@ class CrawlNewsfeed(Base):
                                 pass
 
                             if img_element:
-                                print(
-                                    "The <a> co the <img> phia truoc, khong lay href."
-                                )
+                                print("The <a> co the <img> phia truoc, khong lay href.")
                             else:
                                 href = a.get_attribute("href")
                                 if (
@@ -1064,7 +1072,7 @@ class CrawlNewsfeed(Base):
 
                 except Exception as e:
                     print(f"Loi khi xu ly comment: {e}")
-                    continue  # Bỏ qua comment này nếu có lỗi
+                    continue
 
                 # Xóa các ký tự không cần thiết
                 for text in removeComment:
@@ -1098,12 +1106,100 @@ class CrawlNewsfeed(Base):
 
         except Exception as e:
             print(f"Loi tong quat trong get_comments: {e}")
-        except Exception as e:
-            print(e)
             print("Khong lay duoc binh luan!")
             raise Exception("Khong lay duoc binh luan!")
         finally:
             return data, has_link_in_comments
+
+
+    def _parse_comments_from_html(self, driver, modal):
+        """
+        Fallback method: Parse comments từ HTML source code
+        """
+        print("Parsing comments from HTML source...")
+        data = []
+        has_link_in_comments = False
+        removeComment = ["·", "Author\n", "  ", "Top fan", "Follow"]
+        
+        try:
+            html = driver.page_source()
+            tree = etree.HTML(html)
+            
+            comment_elements = []
+            for xpath in xpaths.comments:
+                comment_elements = tree.xpath(xpath)
+                if len(comment_elements) > 0:
+                    print(f"Tim thay {len(comment_elements)} comments bang XPath: {xpath}")
+                    break
+            
+            if len(comment_elements) == 0:
+                print("Khong tim thay comment nao trong HTML")
+                return data, has_link_in_comments
+            
+            countComment = 0
+            for cm_element in comment_elements[:10]:  # Giới hạn 10 comments
+                try:
+                    # Lấy text content
+                    text_content = cm_element.xpath('string(.)')
+                    print("text_content: ", text_content)
+                    textComment = ' '.join([t.strip() for t in text_content if t.strip()])
+                    
+                    if not textComment:
+                        continue
+                    
+                    # Lấy links
+                    link_comment = []
+                    a_elements = cm_element.xpath('.//a[@href]')
+                    for a in a_elements:
+                        href = a.get('href')
+                        # Kiểm tra xem có img trong <a> không
+                        has_img = len(a.xpath('.//img')) > 0
+                        if not has_img and href and self.convert_url.is_valid_link(href):
+                            if href not in link_comment:
+                                link_comment.append(href)
+                    
+                    # Xóa các ký tự không cần thiết
+                    for text in removeComment:
+                        textComment = textComment.replace(text, "")
+                    
+                    textArray = textComment.split("\n")
+                    textArray = [t.strip() for t in textArray if t.strip()]
+                    
+                    # Kiểm tra nếu có 'Top fan'
+                    if "Top fan" in textComment:
+                        user_name = textArray[1] if len(textArray) > 1 else ""
+                        textContentComment = " ".join(textArray[2:])
+                    else:
+                        user_name = textArray[0] if len(textArray) > 0 else ""
+                        textContentComment = " ".join(textArray[1:])
+                    
+                    textContentComment = textContentComment.replace("Follow", "").strip()
+                    
+                    if textContentComment:  # Chỉ thêm nếu có nội dung
+                        countComment += 1
+                        if len(link_comment) > 0:
+                            has_link_in_comments = True
+                        data.append(
+                            {
+                                "user_name": user_name,
+                                "content": textContentComment,
+                                "link_comment": [
+                                    self.convert_url.clean_facebook_url_redirect(url)
+                                    for url in link_comment
+                                ],
+                            }
+                        )
+                        
+                except Exception as e:
+                    print(f"Loi khi parse comment tu HTML: {e}")
+                    continue
+            
+            print(f"Da parse duoc {countComment} comments tu HTML")
+            
+        except Exception as e:
+            print(f"Loi trong _parse_comments_from_html: {e}")
+        
+        return data, has_link_in_comments
 
     # Hàm có tác dụng xem ảnh để facebook quan tâm đề xuất bài viết
     def views_image(self, images, driver, modal):
@@ -1138,8 +1234,8 @@ class CrawlNewsfeed(Base):
                         traceback.print_exc()
                         continue  # Bỏ qua nếu không tìm thấy ảnh
                     
+                    sleep(10)
                     driver.close_modal(last=True)
-                    sleep(1)
                 except Exception as e:
                     print(f"Loi khi xem anh: {e}")
                     continue
@@ -1581,6 +1677,7 @@ class CrawlViaNewsfeed:
         if config_request.get("filter_type") == "link":
             config["filter_link"] = True
         identifier = job_data.get("representative_code")
+        print("identifier: ", identifier)
         stop_event = threading.Event()
         thread = threading.Thread(
             target=CrawlNewsfeed, args=(identifier, config, False)

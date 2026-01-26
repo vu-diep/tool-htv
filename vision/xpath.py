@@ -17,13 +17,14 @@ class Xpath:
             "//*[@aria-describedby and @aria-labelledby]",
         ],
     )
+    comment_button = './/*[@data-ad-rendering-role="comment_button"]'
     content = './/*[@data-ad-rendering-role="story_message"]'
     scroll = ".//div/div/div/div[2]"
     media = './/*[@data-ad-rendering-role="story_message"]/parent::div/following-sibling::div'
     dyamic = './/*[@data-visualcompletion="ignore-dynamic"]/div/div/div/div'
     hasMore = ".//div[text()='See more']"
     comments = [
-        "//*[@aria-describedby and @aria-labelledby]//*[contains(@aria-label, 'Comment')]",
+        ".//*[@aria-describedby and @aria-labelledby]//*[contains(@aria-label, 'Comment')]",
         ".//*[contains(@aria-label, 'Comment')]/..",
     ]
     btn_follow = '//div[@data-ad-rendering-role="profile_name"]//div[@role="button"]//span[text() = "Follow"]'
@@ -55,6 +56,8 @@ class Xpath:
     link_comment_elements = './/*[contains(@aria-label, "Comment")]/..//span[@role="link" and @data-focusable="true"]'
     title_fanpages = ["(//h1)/span/..", "(//h1)[last()]"]
     profile_name = '(//div[@data-ad-rendering-role="profile_name"])[last()]'
+    home = '//*[@aria-label="Home"]'
+    back = '//*[@aria-label="Back"]'
 
 class XpathLogin:
     input_login = [
