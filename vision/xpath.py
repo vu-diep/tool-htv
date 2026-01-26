@@ -18,7 +18,7 @@ class Xpath:
         ],
     )
     comment_button = './/*[@data-ad-rendering-role="comment_button"]'
-    content = './/*[@data-ad-rendering-role="story_message"]'
+    content = ['.//*[@data-ad-rendering-role="story_message"]', '/div[2]']
     scroll = ".//div/div/div/div[2]"
     media = './/*[@data-ad-rendering-role="story_message"]/parent::div/following-sibling::div'
     dyamic = './/*[@data-visualcompletion="ignore-dynamic"]/div/div/div/div'
@@ -58,7 +58,9 @@ class Xpath:
     profile_name = '(//div[@data-ad-rendering-role="profile_name"])[last()]'
     home = '//*[@aria-label="Home"]'
     back = '//*[@aria-label="Back"]'
-
+    profile_page_mobile = '//*[@aria-label="Tap to open profile page"]'
+    time_up_mobile = '//*[@aria-label="Tap to open profile page"]/../div[2]'
+    
 class XpathLogin:
     input_login = [
         {"query": "email", "type": "tag_name"},

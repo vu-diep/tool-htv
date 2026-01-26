@@ -200,7 +200,11 @@ class Base(RootManager):
             self.click_see_mores(driver=driver, parent=modal)
             content_link = []
             replace_content = []
-            content = driver.find(xpaths.content, parent=modal)
+            content = None
+            for xpath_content in xpaths.content:
+                content = driver.find(xpath_content, parent=modal)
+                if content is not None:
+                    break
             if content is None:
                 return "", content_link
             a_tags = driver.find_all(xpaths.a, parent=content)

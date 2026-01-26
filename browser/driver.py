@@ -212,6 +212,9 @@ class Driver(ChromeManager):
                 os.remove(img_path)
                 print("Danh da bi xoa.")
     
+    def screenshot(self, path="screen.png"):
+        return self.current_page.screenshot(path=path, full_page=True)
+    
     def click_script(self, locator, wait=0.5):
         try:
             locator.wait_for(state="visible", timeout=5000)

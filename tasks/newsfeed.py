@@ -354,9 +354,9 @@ class CrawlNewsfeed(Base):
                             self.config["params"] = params
                             driver.get("https://facebook.com", e_wait=3)
                             if driver.os_type_web:
-                                self.handle_craw_web(driver, stop_event)
+                                self.handle_crawl_web(driver, stop_event)
                             elif driver.os_type_mobile:
-                                self.handle_craw_mobile(driver, stop_event)
+                                self.handle_crawl_mobile(driver, stop_event)
                             self.random_sleep()
                             continue
                         except Exception as e:
@@ -490,7 +490,7 @@ class CrawlNewsfeed(Base):
         list_link_page_not_crawl = [page["link"] for page in list_page_not_crawl]
         return list_link_page_not_crawl
 
-    def handle_craw_web(self, driver, stop_event):
+    def handle_crawl_web(self, driver, stop_event):
         start_time = self.config["start_time"]
         time_run = self.config["time_run"]
         socket = self.config["socket"]
@@ -535,7 +535,6 @@ class CrawlNewsfeed(Base):
                 for xpath in xpaths.list_posts:
                     list_posts = driver.find_all(xpath)
                     if list_posts:
-                        print("modal: ", xpath)
                         break
                 len_list_post = len(list_posts)
                 print("len_list_post: ", len_list_post)
@@ -638,6 +637,107 @@ class CrawlNewsfeed(Base):
                                     self.histories.update(id=history_id, data={'counts': quantity_post})
                                     # quay trở về trang chủ
                                     self.back_home(driver=driver)
+                    except Exception as e:
+                        print(f"Phan tu khong ton tai, tim lai phan tu: {e}")
+                        traceback.print_exc()
+                        continue
+            except Exception as e:
+                raise Exception(e)
+
+    def handle_crawl_mobile(self, driver, stop_event):
+        start_time = self.config["start_time"]
+        time_run = self.config["time_run"]
+        socket = self.config["socket"]
+        id = self.config["id"]
+        account = self.config["account"]
+        page = self.config["page"]
+        params = self.config["params"]
+        tool_activity_logs_id = self.config["tool_activity_logs_id"]
+        get_article_friend = self.config["get_article_friend"]
+        filter_keyword = self.config["filter_keyword"]
+        list_post_id = []
+        keywords = self.config["keywords"]
+        
+        start_time_crawl = monotonic()
+        # thời gian thực hiện search. 5p
+        timeout_search = 3000
+        last_run_search = start_time_crawl
+        index_keyword = 0
+        
+        # tạo lịch sử cào bài
+        responseAddHistory = self.histories.createNewsFeed(
+            {"account_id": account.get("id"), "counts": 0}
+        )
+        history_id = responseAddHistory["id"]
+        quantity_post = 0
+        listId = set()
+        print("keywords: ", json.dumps(keywords, indent=4))
+        
+        # vòng lặp thực hiện công việc cào dữ liệu
+        while time() - start_time < time_run and not stop_event.is_set():
+            try:
+                now = monotonic()
+                # Sử lý logic search. Cứ sau timeout_search mà không tìm được bài nào và có yêu cầu lọc theo keyword thì thực hiện search rồi mới thu thập bài viết
+                if filter_keyword and now - last_run_search >= timeout_search and len(keywords) > 0:
+                    keyword = keywords[index_keyword]
+                    print("Thuc hien search tu khoa: ", keyword)
+                    self.search_keywords(keyword, driver)
+                    index_keyword += index_keyword
+                    
+                list_posts = []
+                # Lặp qua từng XPath cho đến khi tìm được phần tử
+                for xpath in xpaths.list_posts:
+                    list_posts = driver.find_all(xpath)
+                    if list_posts:
+                        break
+                len_list_post = len(list_posts)
+                print("len_list_post: ", len_list_post)
+                for modal in list_posts:
+                    try:
+                        # nếu modal đã k còn thì bỏ qua
+                        if driver.check_dom(modal) == False:
+                            continue
+                        # cuộn chuột đến bài post
+                        modal.scroll_into_view_if_needed()
+                        sleep(1)
+                        # Nếu không lấy các bài viết của bạn bè
+                        # if get_article_friend == False:
+                        #     # chỉ lấy các bài viết có chữ follow
+                        #     btn_follow = driver.find_all(xpaths.btn_follow, parent=modal)
+                        #     if not btn_follow:
+                        #         continue
+                        # kiểm tra nếu có see more thì click vào để lấy toàn bộ nội dung
+                        content, content_link = self.extract_facebook_content(
+                            driver, modal=modal
+                        )
+                        print("content: ", content)
+                        print("content_link: ", content_link)
+                        sleep(self.random_seconds())
+                        matched_keywords = []
+                        if filter_keyword  and len(keywords) > 0:
+                            matched_keywords = self.filter_keywords(
+                                content=content, keywords=keywords
+                            )
+                            if len(matched_keywords) == 0:
+                                continue
+                        # thu thập đường link
+                        idAreaPost = (
+                            modal.get_attribute("aria-posinset")
+                            or modal.get_attribute("data-tracking-duration-id")
+                            or modal.get_attribute("aria-describedby")
+                            or modal.get_attribute("data-ft")
+                        )
+                        if idAreaPost not in listId:
+                            listId.add(idAreaPost)
+                            # chuyển hướng vào trong chi tiết bài viết
+                            time_up_element = driver.find(xpaths.time_up_mobile, parent=modal)
+                            if time_up_element is None:
+                                continue
+                            time_up = time_up_element.inner_text().strip()
+                            print("time_up: ", time_up)
+                            driver.click_script(time_up_element)
+                            profile_page = driver.find(xpaths.profile_page_mobile, parent=modal)
+                            
                     except Exception as e:
                         print(f"Phan tu khong ton tai, tim lai phan tu: {e}")
                         traceback.print_exc()
@@ -1269,167 +1369,6 @@ class CrawlNewsfeed(Base):
             traceback.print_exc()
             return {}
 
-    def handle_craw_mobile(self, driver, stop_event):
-        socket = self.config["socket"]
-        id = self.config["id"]
-        account = self.config["account"]
-        page = self.config["page"]
-        time_run_sql = self.config["time_run_sql"]
-        tool_activity_logs_id = self.config["tool_activity_logs_id"]
-
-        params = self.config["params"]
-        start_time = time()
-        time_run = time_run_sql * 3600
-        account_id = account.get("id", 0)
-        cookie_id = (
-            account.get("latest_cookie")["id"]
-            if account and account.get("latest_cookie")
-            else 0
-        )
-        counts = 1
-        count_article_success = 0
-        position_article = 1
-        print("Lay danh sach link bai viet")
-        responseAddHistory = self.histories.createNewsFeed(
-            {"account_id": account_id, "counts": 0}
-        )
-        socket(
-            id=id,
-            message=responseAddHistory["message"],
-            tool_activity_logs_id=tool_activity_logs_id,
-            status=1,
-        )
-        idHistory = responseAddHistory["id"]
-        while (
-            time() - start_time < time_run
-            and not stop_event.is_set()
-            and count_article_success < 10
-        ):
-            # nếu vị trí bài viết lớn hơn 100 thì reset về 1
-            if position_article > 100:
-                position_article = 1
-            # nếu vị trí bài viết bằng 1 thì scroll cuối màn hình
-            elif position_article > 1:
-                driver.execute_script("window.scrollBy(0, window.innerHeight);")
-                sleep(2)
-            try:
-                path = f"""(
-                    ((//*[@data-tracking-duration-id][{position_article}])
-                    //*[@data-action-id])[1]
-                    //*
-                    [(@data-mcomponent="TextArea" or @data-mcomponent="ServerTextArea")
-                    and @data-focusable="true"
-                    and not(@role="button")]
-                )[last()]"""
-
-                try:
-                    btn_detail = driver.find(path)
-                except Exception:
-                    position_article += 1
-                    continue
-                socket(
-                    id=id,
-                    message=f"Lấy danh sách link bài viết",
-                    tool_activity_logs_id=tool_activity_logs_id,
-                    status=1,
-                )
-                time_text = btn_detail.inner_text().strip()
-                try:
-                    converTime = self.convert_to_db_format(time_text)
-                    driver.click_script(btn_detail)
-                except:
-                    converTime = None
-                try:
-                    driver.page.wait_for_url("**/story.php")
-                except:
-                    link = driver.current_url
-                    print(f"Url khong chua /story.php bo qua: {link}")
-                    position_article += 1
-                    continue
-                link = driver.current_url
-                post_id = self.get_post_id(link, converTime)
-                root_page_id = self.get_post_id(link, converTime, "id")
-                link = {
-                    "post_fb_id": post_id,
-                    "post_fb_link": link,
-                    "status": 1,
-                    "cookie_id": cookie_id,
-                    "account_id": account_id,
-                    "time_up": converTime,
-                    "root_page_id": root_page_id,
-                }
-                try:
-                    # nếu chưa có lịch sử thì tạo mới
-                    if counts > 1:
-                        self.histories.update(id=idHistory, data={"counts": counts})
-                except Exception as e:
-                    raise Exception(f"Lỗi lưu khi gửi tạo history create newsfeed: {e}")
-                # lặp qua đường link chi tiết rồi lấy ra bài viết
-                try:
-                    counts += 1
-                    article = self.craw_content_page_mobile(
-                        driver=driver, linkItem=link
-                    )
-                    if article:
-                        # lấy ra page vừa lấy
-                        article["idHistoryCrawPage"] = idHistory
-                        print("Dang gui du lieu len server")
-                        socket(
-                            id=id,
-                            message=f"Đang gửi dữ liệu lên server",
-                            tool_activity_logs_id=tool_activity_logs_id,
-                            status=1,
-                        )
-                        response = self.posts.add_post_newsfeed(
-                            {"data": article}, params
-                        )
-                        print("Da gui du lieu len server: ", response)
-                        message = response.get("message", "Lỗi server vui lòng gọi IT")
-                        socket(
-                            id=id,
-                            message=message,
-                            tool_activity_logs_id=tool_activity_logs_id,
-                            status=1,
-                        )
-                        count_article_success += 1
-                    else:
-                        responseUpdateHistory = self.histories.updateValidCrawlNewsFeed(
-                            idHistory, {}
-                        )
-                        socket(
-                            id=id,
-                            message=responseUpdateHistory["message"],
-                            tool_activity_logs_id=tool_activity_logs_id,
-                            status=1,
-                        )
-                except Exception as e:
-                    content = f"Tài khoản: {account.get("name")} - Fanpage: {page.get("name")}  - Lỗi lấy bài viết: {e}"
-                    socket(
-                        id=id,
-                        message=content,
-                        tool_activity_logs_id=tool_activity_logs_id,
-                        status=1,
-                    )
-                    raise Exception(content)
-            except Exception as e:
-                print("Loi trong handle_craw_mobile: ", e)
-                raise Exception(e)
-            finally:
-                position_article += 1
-                search = self.config["search"]
-                max_back_times = 2 if search else 1
-
-                for _ in range(max_back_times):
-                    try:
-                        # thực hiện back lại trang để lấy link khác
-                        back_button = driver.find('//div[@aria-label="Back"]')
-                        driver.click_script(back_button)
-                        sleep(5)
-                    except Exception as e:
-                        break
-
-                sleep(5)
-                self.histories.update(idHistory, {"status": 2})
 
     def craw_content_page_mobile(self, driver, linkItem, config):
         keywords = config["keywords"]
