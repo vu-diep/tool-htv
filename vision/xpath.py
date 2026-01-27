@@ -59,7 +59,10 @@ class Xpath:
     home = '//*[@aria-label="Home"]'
     back = '//*[@aria-label="Back"]'
     profile_page_mobile = '//*[@aria-label="Tap to open profile page"]'
-    time_up_mobile = '//*[@aria-label="Tap to open profile page"]/../div[2]'
+    time_up_mobile = "//div[@aria-label='Tap to open profile page']/../div[@data-type='text']//*[not(self::*[@role='link'] or ancestor::*[@role='link'])]/self::span"
+    btn_comment_article_mobile = "//div[@role='button' and contains(@aria-label, 'comments')]"
+    image_mobile = '//div[@role="button" and contains(@aria-label, "like")]/../../..//div[@data-type="container"]//div[contains(@aria-label, "May be an image of") and @data-type="text"]//img'
+    video_mobile = './/div[@data-type="container"]//video'
     
 class XpathLogin:
     input_login = [
