@@ -714,6 +714,7 @@ class CrawlNewsfeed(Base):
                 len_list_post = len(list_posts)
                 print("len_list_post: ", len_list_post)
                 for modal in list_posts:
+                    data = {}
                     try:
                         # nếu modal đã k còn thì bỏ qua
                         if driver.check_dom(modal) == False:
@@ -731,8 +732,8 @@ class CrawlNewsfeed(Base):
                         content, content_link = self.extract_facebook_content(
                             driver, modal=modal
                         )
+                        data['content'] = content
                         print("content: ", content)
-                        print("content_link: ", content_link)
                         sleep(self.random_seconds())
                         matched_keywords = []
                         if filter_keyword and len(keywords) > 0:
@@ -765,11 +766,30 @@ class CrawlNewsfeed(Base):
                                 continue
                             time_up = time_up_element.inner_text().strip()
                             print("time_up: ", time_up)
+                            data['time_up'] = time_up
                             dataMedia = self.get_image_and_video_mobile(driver, driver)
+                            data['media'] = dataMedia
+                            # Lấy bình luận
+                            comments, has_link_in_comments = self.get_comments(
+                                modal, driver
+                            )
+                            data['comments'] = comments
                             profile_page = driver.find(
                                 xpaths.profile_page_mobile, parent=modal
                             )
-
+                            page_name = profile_page.inner_text()
+                            driver.click_script(profile_page)
+                            link = driver.current_url
+                            print("link: ", link)
+                            info_page = self.get_info_page(driver)
+                            data["like_counts"] = info_page["like_counts"]
+                            data["follow_counts"] = info_page["follow_counts"]
+                            data["following_counts"] = info_page["following_counts"]
+                            data["name"] = page_name
+                            data["verified"] = info_page["verified"]
+                            data["id_facebook"] = info_page["id_facebook"]
+                            print("data: ", json.dumps(data, indent=4))
+                            
                     except Exception as e:
                         print(f"Phan tu khong ton tai, tim lai phan tu: {e}")
                         traceback.print_exc()
@@ -1077,15 +1097,9 @@ class CrawlNewsfeed(Base):
         return data
     # lấy số lượng cảm xúc và bình luận mobile
     def get_number_of_reactions_and_comments_mobile(self, driver):
-        all_reactions = driver.find(
-            xpaths.all_reactions, type_query="tag_name"
-        )
-        comment_element = driver.find(
-            xpaths.comment_element, type_query="tag_name"
-        )
-        shares_element = driver.find(
-            xpaths.shares_element, type_query="tag_name"
-        )
+        all_reactions = driver.find(xpaths.all_reactions_mobile)
+        comment_element = driver.find(xpaths.comment_element_mobile)
+        shares_element = driver.find(xpaths.shares_element_mobile)
         data = self.action_get_number_of_reactions_and_comments(all_reactions, comment_element, shares_element)
         return data
 
@@ -1366,48 +1380,36 @@ class CrawlNewsfeed(Base):
         return data, has_link_in_comments
 
     # Hàm có tác dụng xem ảnh để facebook quan tâm đề xuất bài viết
-    def views_image(self, images, driver, modal):
-        if len(images) > 0:
-            for img in images:
-                try:
-                    # Kiểm tra xem img có phải là chuỗi hợp lệ không
-                    if not isinstance(img, str):
-                        print(f"URL anh khong hop lo: {img}")
-                        continue  # Bỏ qua nếu không phải chuỗi
+    def views_image(self, driver, modal):
+        try:
+            # Tìm <img> có src giống với ảnh trong modal
+            try:
+                link = driver.find(xpaths.img_feedImage, parent=modal)
+                # Tìm thẻ <a> cha bao quanh <img>
+                link_element = driver.find(xpaths.ancestor_a, parent=link)
+                href = link_element.get_attribute(
+                    "href"
+                )  # Lấy href của thẻ <a>
+                print("href: ", href)
+                # Nếu href không phải của Facebook thì bỏ qua
+                if not href.startswith("https://www.facebook.com/"):
+                    print(f"⛔ Link ngoai, khong click: {href}")
+                # Kiểm tra xem ảnh có thuộc quảng cáo không
+                ad_element = driver.find(
+                    "./ancestor::div[@data-ad-rendering-role='image']",
+                    parent=link,
+                )
+                if ad_element is None:
+                    # Click vào ảnh nếu hợp lệ
+                    link.scroll_into_view_if_needed()
+                    driver.click_script(link)
+            except Exception as e:
+                traceback.print_exc()
 
-                    # Tìm <img> có src giống với ảnh trong modal
-                    try:
-                        link = driver.find(xpaths.img_feedImage, parent=modal)
-                        # Tìm thẻ <a> cha bao quanh <img>
-                        link_element = driver.find(xpaths.ancestor_a, parent=link)
-                        href = link_element.get_attribute(
-                            "href"
-                        )  # Lấy href của thẻ <a>
-                        print("href: ", href)
-                        # Nếu href không phải của Facebook thì bỏ qua
-                        if not href.startswith("https://www.facebook.com/"):
-                            print(f"⛔ Link ngoai, khong click: {href}")
-                            continue  # Bỏ qua link ngoài
-                        # Kiểm tra xem ảnh có thuộc quảng cáo không
-                        ad_element = driver.find(
-                            "./ancestor::div[@data-ad-rendering-role='image']",
-                            parent=link,
-                        )
-                        if ad_element is not None:
-                            continue
-                        # Click vào ảnh nếu hợp lệ
-                        link.scroll_into_view_if_needed()
-                        driver.click_script(link)
-                    except Exception as e:
-                        print(f"⚠️ Khong tim thay anh: {img}")
-                        traceback.print_exc()
-                        continue  # Bỏ qua nếu không tìm thấy ảnh
-
-                    sleep(10)
-                    driver.close_modal(last=True)
-                except Exception as e:
-                    print(f"Loi khi xem anh: {e}")
-                    continue
+            sleep(10)
+            driver.close_modal(last=True)
+        except Exception as e:
+            print(f"Loi khi xem anh: {e}")
 
     def get_source_post(self, driver, modal):
         try:
@@ -1418,6 +1420,35 @@ class CrawlNewsfeed(Base):
             proficeName = driver.find(
                 xpaths.profile_name, parent=modal, type_query="tag_name"
             )
+            a_element = driver.find("a", type_query="tag_name", parent=proficeName)
+            a_href = a_element.get_attribute("href")
+
+            data["link"] = self.convert_url.extract_clean_url_profile(a_href)
+
+            if a_href:
+                a_element.click()
+
+                # Lấy các thông tin của page
+                info_page = self.get_info_page(driver)
+                data["like_counts"] = info_page["like_counts"]
+                data["follow_counts"] = info_page["follow_counts"]
+                data["following_counts"] = info_page["following_counts"]
+                data["name"] = info_page["name"]
+                data["verified"] = info_page["verified"]
+                data["id_facebook"] = info_page["id_facebook"]
+            return data
+        except Exception as e:
+            print(f"Loi khi lay nguon goc bai viet: {e}")
+            traceback.print_exc()
+            return {}
+    
+    def get_source_post_mobile(self, driver):
+        try:
+            data = {}
+            print("Dang lay duong link profile")
+
+            # Lấy đường dẫn tới profile
+            proficeName = driver.find(xpaths.profile_name,  type_query="tag_name")
             a_element = driver.find("a", type_query="tag_name", parent=proficeName)
             a_href = a_element.get_attribute("href")
 
@@ -1544,7 +1575,7 @@ class CrawlNewsfeed(Base):
                     media["images"].append(src)
 
             # Thực hiện xem chi tiết ảnh
-            self.views_image(media["images"], driver, driver)
+            self.views_image(driver, driver)
             sleep(5)
 
             # Lưu thông tin bài viết

@@ -1,9 +1,16 @@
 class Xpath:
     form_logout = "//meta[@name='viewport']"
     verify_account = './/*[@aria-label="Verified"]'
-    friends_likes = "a[href*='friends_likes']"
-    followers = "a[href*='followers']"
-    following = "a[href*='following']"
+    friends_likes = ["a[href*='friends_likes']"]
+    followers = [
+        {"query": "a[href*='followers']", "type": "css"},
+        {"query": '//div[contains(@aria-label, "followers")]', "type": "xpath"}
+    ]
+
+    following = [
+        {"query": "a[href*='following']", "type": "css"},
+        {"query": '//div[contains(@aria-label, "following")]', "type": "xpath"}
+    ]
     list_posts = [
         "//*[@aria-posinset]",
         "//*[@data-tracking-duration-id]",
@@ -51,6 +58,9 @@ class Xpath:
     comment_element = '//div[@role="button" and @aria-expanded="true"]//span[contains(text(), "comments")]'
     shares_element = '(//div[@role="button"]//span[contains(text(), "shares")])[last()]'
     all_reactions = '(//div[text()="All reactions:"]/..)[last()]'
+    comment_element_mobile = '//div[@role="button" and contains(@aria-label, "share")]/..//div[ @role="button" and contains(@aria-label, "comments") and not(contains(@aria-label, "Tap to see comments and reactions")) ]'
+    shares_element_mobile = '//div[@role="button" and contains(@aria-label, "share")]'
+    all_reactions_mobile = '//div[@role="button" and contains(@aria-label, "Tap to see comments and reactions")]'
     div_elements = "./div"
     img_element = "preceding-sibling::img"
     link_comment_elements = './/*[contains(@aria-label, "Comment")]/..//span[@role="link" and @data-focusable="true"]'
@@ -61,7 +71,7 @@ class Xpath:
     profile_page_mobile = '//*[@aria-label="Tap to open profile page"]'
     time_up_mobile = "//div[@aria-label='Tap to open profile page']/../div[@data-type='text']//*[not(self::*[@role='link'] or ancestor::*[@role='link'])]/self::span"
     btn_comment_article_mobile = "//div[@role='button' and contains(@aria-label, 'comments')]"
-    image_mobile = '//div[@role="button" and contains(@aria-label, "like")]/../../..//div[@data-type="container"]//div[contains(@aria-label, "May be an image of") and @data-type="text"]//img'
+    image_mobile = '//div[@role="button" and contains(@aria-label, "like")]/../../..//div[@data-type="container"]//div[@aria-label and @data-type="text"]//img'
     video_mobile = './/div[@data-type="container"]//video'
     
 class XpathLogin:

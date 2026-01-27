@@ -81,13 +81,15 @@ class Base(RootManager):
             except:
                 data["verified"] = 0
 
-            likes = driver.find(xpaths.friends_likes, type_query = "css")
-            if likes is not None:
-                data["like_counts"] = driver.inner_text(likes)
-
-            follows = driver.find(xpaths.followers, type_query = "css")
-            if follows is not None:
-                data["follow_counts"] = driver.inner_text(follows)
+            for xpaths_friends_like in xpaths.friends_likes:
+                likes = driver.find(xpaths_friends_like['query'], type_query = xpaths_friends_like['type'])
+                if likes is not None:
+                    data["like_counts"] = driver.inner_text(likes)
+                    break
+            for xpaths_follows in xpaths.followers:       
+                follows = driver.find(xpaths_follows['query'], type_query = xpaths_follows['type'])
+                if follows is not None:
+                    data["follow_counts"] = driver.inner_text(follows)
 
             following = driver.find(xpaths.following, type_query = "css")
             if following is not None:
