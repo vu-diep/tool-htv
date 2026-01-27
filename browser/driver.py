@@ -280,13 +280,7 @@ class Driver(ChromeManager):
     def focus_element_script(self, element, wait=0.5):
         self.current_page.execute_script("""arguments[0].scrollIntoView(true);arguments[0].focus();""", element)
         sleep(wait)
-                   
-    def send_keys(self, element, content):
-        # for char in content:
-        #     sleep(random.uniform(0.05, 0.2))  # Giả lập người dùng gõ từng ký tự
-        #     element.send_keys(char)
-        element.keyboard.type(content, delay=60)
-    
+                       
        # Tạo hàm send_message để sử dụng ở nơi khác
     
     async def send_message(self, message, group):
@@ -492,3 +486,7 @@ class Driver(ChromeManager):
         return html
     def check_dom(self, locator):
         return locator.count() > 0
+    def click_mouse(self, center_x, center_y):
+        self.current_page.mouse.click(center_x, center_y)
+    def send_keys(self, content):
+        self.current_page.keyboard.type(content, delay=60)

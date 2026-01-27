@@ -160,8 +160,8 @@ def test_single_image(model_path: str, image_path: str):
 if __name__ == "__main__":
 
     # 🔧 CẤU HÌNH - THAY ĐỔI Ở ĐÂY
-    MODEL_PATH = "D:\\TrainingAI\\Login\\login_01.pt"
-    IMAGE_PATH = "D:\\TrainingAI\\Login\\Dataset Yolo\\train\\images\\image_5.png"
+    MODEL_PATH = "E:\\asfy\\facebook\\tool_playwright\\vision\\models\\login.pt"
+    IMAGE_PATH = "E:\\asfy\\facebook\\tool_playwright\\screen.png"
 
     # 🚀 CHẠY TEST
     print("🚀 Bắt đầu test model...")
