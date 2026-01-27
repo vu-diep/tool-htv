@@ -200,7 +200,11 @@ class Base(RootManager):
             self.click_see_mores(driver=driver, parent=modal)
             content_link = []
             replace_content = []
-            content = driver.find(xpaths.content, parent=modal)
+            content = None
+            for xpath_content in xpaths.content:
+                content = driver.find(xpath_content, parent=modal)
+                if content is not None:
+                    break
             if content is None:
                 return "", content_link
             a_tags = driver.find_all(xpaths.a, parent=content)
@@ -234,7 +238,7 @@ class Base(RootManager):
         nfkd_form = unicodedata.normalize("NFKD", input_str)
         return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
-    # lấy ảnh và video
+    # lấy ảnh và video dang pc
     def get_image_and_video(self, driver, modal):
         media = None
         data = {"images": [], "videos": []}
@@ -244,19 +248,35 @@ class Base(RootManager):
             media = modal
         try:
             images = driver.find_all(xpaths.img, parent=media)
-            for img in images:
-                src = img.get_attribute("src")
-                if src and src.startswith("http") and "emoji.php" not in src:
-                    data["images"].append(img.get_attribute("src"))
-
             videos = driver.find_all(xpaths.video, parent=media)
-            for video in videos:
-                data["videos"].append(video.get_attribute("src"))
+            data = self.action_get_image_and_video(images, videos)
         except Exception as e:
             print(f"Bai viet k co anh hoac video: ", e)
             raise Exception("Bai viet k co anh hoac video")
         return data
-
+    
+    # lấy ảnh và video dạng mobile
+    def get_image_and_video_mobile(self, driver):
+        data = {"images": [], "videos": []}
+        try:
+            images = driver.find_all(xpaths.image_mobile)
+            videos = driver.find_all(xpaths.video_mobile)
+            data = self.action_get_image_and_video(images, videos)
+        except Exception as e:
+            print(f"Bai viet k co anh hoac video: ", e)
+            raise Exception("Bai viet k co anh hoac video")
+        return data
+    
+    def action_get_image_and_video(self, locator_image, locator_video):
+        data = {"images": [], "videos": []}
+        for img in locator_image:
+            src = img.get_attribute("src")
+            if src and src.startswith("http") and "emoji.php" not in src:
+                data["images"].append(img.get_attribute("src"))
+        for video in locator_video:
+            data["videos"].append(video.get_attribute("src"))
+        return data
+        
     def convert_to_db_format(self, time_string):
         try:
             parsed_time = dateparser.parse(time_string)
