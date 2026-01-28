@@ -6,6 +6,7 @@ tool_agent/
 │
 ├── resources/
 │   ├── extensions/
+|   ├── error_img/
 │   │   ├── fb_helper/
 │   │   │   ├── manifest.json
 │   │   │   ├── background.js

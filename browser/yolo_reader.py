@@ -111,8 +111,6 @@ class YOLOReader:
         if image is None:
             raise ValueError("Decode image failed")
 
-        print(f"📐 Screenshot size: {image.shape[:2]}")
-        print(f"🔍 DPR: {self.dpr}")
 
         results = self.model(image, conf=conf, verbose=False)
         detections = {}

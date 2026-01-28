@@ -6,10 +6,13 @@ import logging
 import requests
 import requests
 import asyncio
+import uuid
+from pathlib import Path
 
 from .chrome import ChromeManager
 from .yolo_reader import YOLOReader
 from utils.bot_telegram import BotTelegram
+from utils.root import RootManager
 
 
 class Driver(ChromeManager):
@@ -41,6 +44,7 @@ class Driver(ChromeManager):
         self.action_send_error = ""
         self.current_url = self.page.url
         self.current_page = self.page
+        self.root_manager = RootManager()
         
     def get(self, url: str, e_wait: int = 0, driver=None):
         page = driver if driver else self.current_page   # hỗ trợ truyền page riêng nếu cần
@@ -173,7 +177,10 @@ class Driver(ChromeManager):
             self.logger.warning("Không thể chuyen sang tab nay (da dong khong ton tai)")
 
     def switch_to_main(self):
-        """Quay về tab chính ban đầu"""
+        """Quay về tab chính ban đầu và đóng tab hiện tại"""
+        if self.current_page != self.page and not self.current_page.is_closed():
+            self.current_page.close()
+
         if not self.page.is_closed():
             self.switch_to_page(self.page)
             
@@ -215,7 +222,14 @@ class Driver(ChromeManager):
     def screenshot(self, path="screen.png"):
         if path == "":
             return self.current_page.screenshot(full_page=True)
-        return self.current_page.screenshot(path=path, full_page=True)
+        uid = uuid.uuid4().hex
+        p = Path(path)
+
+        new_path = p.with_stem(f"{p.stem}_{uid}")
+        new_path = self.root_manager.get_full_url_user(new_path)
+        self.current_page.screenshot(path=str(new_path), full_page=True)
+
+        return str(new_path)
     
     def click_script(self, locator, wait=0.5):
         try:
@@ -511,3 +525,6 @@ class Driver(ChromeManager):
             div.style.pointerEvents = 'none';
             document.body.appendChild(div);
         """)
+    
+    def get_cookies(self):
+        return self.context.cookies()

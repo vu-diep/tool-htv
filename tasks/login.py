@@ -7,6 +7,7 @@ from .check_point import HandleCheckpoint
 from network.api.servers.proxies import Proxies
 from network.api.servers.accounts import Account
 from vision.xpath import xpaths, xpath_login
+from utils.root import RootManager
 
 
 class Login:
@@ -34,6 +35,8 @@ class Login:
         self.check_point = HandleCheckpoint(self.driver)
         self.proxies = Proxies()
         self.accounts = Account()
+        self.root_manager = RootManager()
+        self.yolo = driver.yolo_reader(model_path=self.root_manager.get_full_url_user('vision/models/login.pt'))
 
     def check_block(self):
         """Check if the account is blocked or temporarily blocked."""
@@ -63,38 +66,59 @@ class Login:
         """Attempt login using username and password."""
         try:
             recent_login = self.driver.find(xpath_login.recent_login)
-            login_password = self.account.get("login_password", "")
             if recent_login is not None:
-                # self.driver.click_auto_chains(recent_login)
                 recent_login.click()
-
-            # thực hiện tìm kiếm xpath theo id
-            for xpat_id in xpath_login.input_login:
-                input_id = self.driver.find(
-                    query=xpat_id["query"],
-                    type_query=xpat_id['type'],
-                    send_keys=self.account.get("login_account", ""),
-                )
-                if input_id:
-                    break
-            # thực hiện tìm kiếm xpath theo password
-            for xpat_password in xpath_login.input_login_password:
-                input_password = self.driver.find(
-                    query=xpat_password["query"],
-                    type_query=xpat_password['type'],
-                    send_keys=login_password,
-                )
-                if input_password:
-                    break
-            # thực hiện tìm kiếm xpath theo button login
-            for xpat_button_login in xpath_login.button_login:
-                input_password = self.driver.find(
-                    query=xpat_button_login["query"],
-                    type_query=xpat_button_login['type'],
-                )
-                if input_password:
-                    input_password.click()
-                    break
+                
+            login_account = self.account.get("login_account", "")
+            login_password = self.account.get("login_password", "")
+            
+            # Thực hiện login bằng AI
+            try:
+                # click ra ngoài để loại bỏ forcus giúp AI nhận rõ hơn
+                self.driver.click_mouse(10, 10)
+                img_bytes = self.driver.screenshot(path="")
+                result = self.yolo.detect(img_bytes=img_bytes)
+                print('result: ', result)
+                mat_khau = result['mat_khau']
+                nut_dang_nhap = result['nut_dang_nhap']
+                tai_khoan = result['tai_khoan']
+                self.driver.click_mouse(tai_khoan['center_x'], tai_khoan['center_y'])
+                self.driver.send_keys(login_account)
+                self.driver.click_mouse(mat_khau['center_x'], mat_khau['center_y'])
+                self.driver.send_keys(login_password)
+                self.driver.click_mouse(nut_dang_nhap['center_x'], nut_dang_nhap['center_y'])
+            except Exception as e:
+                # chụp ảnh lỗi
+                self.driver.screenshot("resources/error_img/login_with_user_pass.png")
+                print("Loi khi login bang AI chuyen sang xpath", e)
+                
+                # thực hiện tìm kiếm xpath theo id
+                for xpat_id in xpath_login.input_login:
+                    input_id = self.driver.find(
+                        query=xpat_id["query"],
+                        type_query=xpat_id['type'],
+                        send_keys=login_account,
+                    )
+                    if input_id:
+                        break
+                # thực hiện tìm kiếm xpath theo password
+                for xpat_password in xpath_login.input_login_password:
+                    input_password = self.driver.find(
+                        query=xpat_password["query"],
+                        type_query=xpat_password['type'],
+                        send_keys=login_password,
+                    )
+                    if input_password:
+                        break
+                # thực hiện tìm kiếm xpath theo button login
+                for xpat_button_login in xpath_login.button_login:
+                    input_password = self.driver.find(
+                        query=xpat_button_login["query"],
+                        type_query=xpat_button_login['type'],
+                    )
+                    if input_password:
+                        input_password.click()
+                        break
 
             self.handle_post_login()
             # kiểm tra và cập nhật ngôn ngữ
@@ -139,39 +163,53 @@ class Login:
 
     def handle_check2fa(self):
         try:
-            btn_try_another_way = self.driver.find(xpath_login.btn_try_another_way)
-            flat_check_2fa = False
-            if btn_try_another_way:
-                btn_try_another_way.click()
-                sleep(3)
-                for xpath_bttn_atuthen in xpath_login.btn_authentication_app:
-                    btn = self.driver.find(xpath_bttn_atuthen, type_query = "tag_name")
-                    if btn:
-                        btn.click()
-                        break
-
-                btn_continue = None
-                for xpath_continue in xpath_login.xpath_continues:
-                    btn_continue = self.driver.find(xpath_continue)
-                    if btn_continue is not None:
-                        break
-                if btn_continue is not None:
-                    try:
-                        btn_continue.click()
-                        self.driver.click_script(btn_continue)
-                        flat_check_2fa = True
-                    except Exception as e:
-                        print("Loi khi click continue trong handle_check2fa: ")
-            sleep(3)
-            authen_app = None
-            for xpath in xpath_login.xpath_authen_app:
-                authen_app = self.driver.find(xpath)
-                if authen_app:
-                    break
-
-            if authen_app or flat_check_2fa:
+            try:
+                img_bytes = self.driver.screenshot(path="")
+                result = self.yolo.detect(img_bytes=img_bytes)
+                print('result: ', result)
+                nut_tiep_tuc = result['nut_tiep_tuc']
+                ma_xac_thuc_2FA = result['ma_xac_thuc_2FA']
                 code = self.get_code_from_2fa(self.account.get("keyword_2fa"))
-                self.push_code(code)
+                print("code: ", code)
+                self.driver.click_mouse(ma_xac_thuc_2FA['center_x'], ma_xac_thuc_2FA['center_y'])
+                self.driver.send_keys(code)
+                self.driver.click_mouse(nut_tiep_tuc['center_x'], nut_tiep_tuc['center_y'])
+            except Exception as e:
+                print("Loi khi check trong handle_check2fa: ", e)
+                
+                btn_try_another_way = self.driver.find(xpath_login.btn_try_another_way)
+                flat_check_2fa = False
+                if btn_try_another_way:
+                    btn_try_another_way.click()
+                    sleep(3)
+                    for xpath_bttn_atuthen in xpath_login.btn_authentication_app:
+                        btn = self.driver.find(xpath_bttn_atuthen, type_query = "tag_name")
+                        if btn:
+                            btn.click()
+                            break
+
+                    btn_continue = None
+                    for xpath_continue in xpath_login.xpath_continues:
+                        btn_continue = self.driver.find(xpath_continue)
+                        if btn_continue is not None:
+                            break
+                    if btn_continue is not None:
+                        try:
+                            btn_continue.click()
+                            self.driver.click_script(btn_continue)
+                            flat_check_2fa = True
+                        except Exception as e:
+                            print("Loi khi click continue trong handle_check2fa: ")
+                sleep(3)
+                authen_app = None
+                for xpath in xpath_login.xpath_authen_app:
+                    authen_app = self.driver.find(xpath)
+                    if authen_app:
+                        break
+
+                if authen_app or flat_check_2fa:
+                    code = self.get_code_from_2fa(self.account.get("keyword_2fa"))
+                    self.push_code(code)
         except Exception as e:
             print("Loi o handle_check2fa: ", e)
             
@@ -228,11 +266,11 @@ class Login:
         if check_login:
             return check_block, True
 
-        if self.cookies:
-            self.driver.set_cookies(self.cookies)
-            self.driver.get(self.FACEBOOK_URL)
-            self.accept_cookies()
-            check_block, check_login = self.check_block(), self.check_login()
+        # if self.cookies:
+        #     self.driver.set_cookies(self.cookies)
+        #     self.driver.get(self.FACEBOOK_URL)
+        #     self.accept_cookies()
+        #     check_block, check_login = self.check_block(), self.check_login()
         if not check_login:
             # kiêm tra xem có tồn tại yêu cầu sử dụng profile//span[text()="Use another profile"]
             btn_use_profile = self.driver.find(xpath_login.btn_use_profile)
