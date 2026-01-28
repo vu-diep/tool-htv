@@ -8,15 +8,22 @@ driver.get("https://facebook.com", e_wait=5)
 # 🔍 DEBUG: Kiểm tra viewport
 viewport = driver.current_page.viewport_size
 print(f"📐 Viewport size: {viewport}")
+# Lấy DPR
+dpr =  driver.current_page.evaluate("window.devicePixelRatio")
+driver.click_mouse(10, 10)
 
 # Screenshot viewport
-img_bytes = driver.current_page.screenshot(full_page=False)
-driver.screenshot()
+img_bytes = driver.screenshot(path="")
 
-yolo = YOLOReader("E:\\asfy\\facebook\\tool_playwright\\vision\\models\\login.pt")
-result = yolo.detect_from_bytes(img_bytes)
+
+yolo = YOLOReader("E:\\asfy\\facebook\\tool_playwright\\vision\\models\\login.pt", dpr=dpr)
+result = yolo.detect(img_bytes=img_bytes)
 print('result: ', result)
+# ===== CÁCH 3: Đọc tất cả text =====
+all_texts = yolo.get_all_text(img_bytes)
+print(f"📋 Tất cả text: {all_texts}")
 
+# for result in results:
 mat_khau = result['mat_khau']
 nut_dang_nhap = result['nut_dang_nhap']
 tai_khoan = result['tai_khoan']
@@ -30,10 +37,10 @@ print(f"📍 Tọa độ nút đăng nhập: ({nut_dang_nhap['center_x']}, {nut_
 driver.current_page.evaluate(f"""
     const div = document.createElement('div');
     div.style.position = 'fixed';
-    div.style.left = '{tai_khoan['x1']}px';
-    div.style.top = '{tai_khoan['y1']}px';
-    div.style.width = '{tai_khoan['width']}px';
-    div.style.height = '{tai_khoan['height']}px';
+    div.style.left = '{mat_khau['x1']}px';
+    div.style.top = '{mat_khau['y1']}px';
+    div.style.width = '{mat_khau['width']}px';
+    div.style.height = '{mat_khau['height']}px';
     div.style.border = '3px solid red';
     div.style.zIndex = '99999';
     div.style.pointerEvents = 'none';
@@ -44,7 +51,7 @@ sleep(2)  # Xem có border đỏ xuất hiện đúng vị trí không
 
 # Test click thủ công trước
 print("\n🖱️ Test click vào tài khoản...")
-driver.current_page.mouse.click(tai_khoan['center_x'], tai_khoan['center_y'])
+driver.current_page.mouse.click(mat_khau['center_x'], mat_khau['center_y'])
 sleep(1)
 
 # 🔍 DEBUG: Kiểm tra xem có element nào được focus không

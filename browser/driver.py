@@ -8,6 +8,7 @@ import requests
 import asyncio
 
 from .chrome import ChromeManager
+from .yolo_reader import YOLOReader
 from utils.bot_telegram import BotTelegram
 
 
@@ -40,7 +41,6 @@ class Driver(ChromeManager):
         self.action_send_error = ""
         self.current_url = self.page.url
         self.current_page = self.page
-        
         
     def get(self, url: str, e_wait: int = 0, driver=None):
         page = driver if driver else self.current_page   # hỗ trợ truyền page riêng nếu cần
@@ -213,6 +213,8 @@ class Driver(ChromeManager):
                 print("Danh da bi xoa.")
     
     def screenshot(self, path="screen.png"):
+        if path == "":
+            return self.current_page.screenshot(full_page=True)
         return self.current_page.screenshot(path=path, full_page=True)
     
     def click_script(self, locator, wait=0.5):
@@ -490,3 +492,22 @@ class Driver(ChromeManager):
         self.current_page.mouse.click(center_x, center_y)
     def send_keys(self, content):
         self.current_page.keyboard.type(content, delay=60)
+    
+    def yolo_reader(self, model_path):
+        dpr =  self.current_page.evaluate("window.devicePixelRatio")
+        yolo = YOLOReader(model_path, dpr)
+        return yolo
+    
+    def test_yolo(self, result_yolo_detect):
+        self.current_page.evaluate(f"""
+            const div = document.createElement('div');
+            div.style.position = 'fixed';
+            div.style.left = '{result_yolo_detect['x1']}px';
+            div.style.top = '{result_yolo_detect['y1']}px';
+            div.style.width = '{result_yolo_detect['width']}px';
+            div.style.height = '{result_yolo_detect['height']}px';
+            div.style.border = '3px solid red';
+            div.style.zIndex = '99999';
+            div.style.pointerEvents = 'none';
+            document.body.appendChild(div);
+        """)
